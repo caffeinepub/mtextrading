@@ -237,7 +237,10 @@ export default function RegisterPage({ onNavigate }: Props) {
     setSubmitting(true);
     try {
       const rawActor = await createRawActor();
-      const success = await (rawActor as any).verifyOtp(email, otpCode);
+      const success = await (rawActor as any).verifyRegistrationOtp(
+        email,
+        otpCode,
+      );
       if (success) {
         toast.success("Email verified!");
         // Persist passwordHash so profile step can derive the right identity

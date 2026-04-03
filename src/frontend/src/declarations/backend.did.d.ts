@@ -340,6 +340,7 @@ export interface _SERVICE {
   >,
   'upgradeUserAccountType' : ActorMethod<[Principal, AccountType], undefined>,
   'verifyOtp' : ActorMethod<[string, string], boolean>,
+  'verifyRegistrationOtp' : ActorMethod<[string, string], boolean>,
   'verifyStaffOtp' : ActorMethod<[string, string], boolean>,
   'checkEmailRegistered' : ActorMethod<[string], boolean>,
   'isEmailVerified' : ActorMethod<[string], boolean>,

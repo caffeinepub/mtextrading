@@ -470,6 +470,7 @@ export const idlService = IDL.Service({
     ),
   'upgradeUserAccountType' : IDL.Func([IDL.Principal, AccountType], [], []),
   'verifyOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
+  'verifyRegistrationOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   'verifyStaffOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
 });
 
@@ -956,6 +957,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'upgradeUserAccountType' : IDL.Func([IDL.Principal, AccountType], [], []),
     'verifyOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
+    'verifyRegistrationOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'verifyStaffOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'checkEmailRegistered' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isEmailVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
