@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+    /* Light theme - white/blue trading platform */
+    --background: 0.98 0 0;
+    --foreground: 0.13 0.01 264;
+    --card: 1 0 0;
+    --card-foreground: 0.13 0.01 264;
+    --popover: 1 0 0;
+    --popover-foreground: 0.13 0.01 264;
+    --primary: 0.52 0.22 264;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.96 0.01 264;
+    --secondary-foreground: 0.13 0.01 264;
+    --muted: 0.96 0.005 264;
+    --muted-foreground: 0.50 0.01 264;
+    --accent: 0.64 0.17 164;
+    --accent-foreground: 1 0 0;
+    --destructive: 0.577 0.245 27.325;
+    --destructive-foreground: 1 0 0;
+    --border: 0.91 0.005 264;
+    --input: 0.91 0.005 264;
+    --ring: 0.52 0.22 264;
+    --chart-1: 0.52 0.22 264;
+    --chart-2: 0.64 0.17 164;
+    --chart-3: 0.75 0.18 80;
+    --chart-4: 0.65 0.22 30;
+    --chart-5: 0.58 0.20 300;
+    --sidebar: 1 0 0;
+    --sidebar-foreground: 0.13 0.01 264;
+    --sidebar-primary: 0.52 0.22 264;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.96 0.005 264;
+    --sidebar-accent-foreground: 0.13 0.01 264;
+    --sidebar-border: 0.91 0.005 264;
+    --sidebar-ring: 0.52 0.22 264;
+  }
+
+  .dark {
+    --background: 0.145 0 0;
+    --foreground: 0.985 0 0;
+    --card: 0.205 0 0;
+    --card-foreground: 0.985 0 0;
+    --popover: 0.269 0 0;
+    --popover-foreground: 0.985 0 0;
+    --primary: 0.52 0.22 264;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.269 0 0;
+    --secondary-foreground: 0.985 0 0;
+    --muted: 0.269 0 0;
+    --muted-foreground: 0.708 0 0;
+    --accent: 0.64 0.17 164;
+    --accent-foreground: 1 0 0;
+    --destructive: 0.704 0.191 22.216;
+    --destructive-foreground: 0.205 0 0;
+    --border: 1 0 0 / 10%;
+    --input: 1 0 0 / 15%;
+    --ring: 0.52 0.22 264;
+    --chart-1: 0.52 0.22 264;
+    --chart-2: 0.64 0.17 164;
+    --chart-3: 0.75 0.18 80;
+    --chart-4: 0.65 0.22 30;
+    --chart-5: 0.58 0.20 300;
+    --sidebar: 0.205 0 0;
+    --sidebar-foreground: 0.985 0 0;
+    --sidebar-primary: 0.52 0.22 264;
+    --sidebar-primary-foreground: 0.985 0 0;
+    --sidebar-accent: 0.269 0 0;
+    --sidebar-accent-foreground: 0.985 0 0;
+    --sidebar-border: 1 0 0 / 10%;
+    --sidebar-ring: 0.439 0 0;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-track {
+  animation: ticker 30s linear infinite;
+  display: flex;
+  width: max-content;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
