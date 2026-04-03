@@ -944,6 +944,14 @@ actor {
     userProfiles.entries().toArray();
   };
 
+  // Returns all emails that have verified registration (even if profile not yet completed)
+  public query ({ caller }) func getEmailRegistrations() : async [Text] {
+    verifyAdminAccess(caller);
+    verifiedEmails.entries().toArray()
+      .filter(func(e : (Text, Bool)) : Bool { e.1 })
+      .map(func(e : (Text, Bool)) : Text { e.0 });
+  };
+
   public query ({ caller }) func getAllAccounts() : async [TradingAccount] {
     verifyAdminAccess(caller);
     tradingAccounts.values().toArray();

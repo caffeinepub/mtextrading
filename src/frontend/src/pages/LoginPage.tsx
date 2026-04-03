@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function LoginPage({ onNavigate }: Props) {
-  const { registerWithEmail } = useEmailAuth();
+  const { loginWithEmail, registerWithEmail } = useEmailAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -75,7 +75,8 @@ export default function LoginPage({ onNavigate }: Props) {
       }
 
       // Load the dashboard with the email identity
-      const identity = registerWithEmail(email);
+      // Try to reuse existing saved identity; if missing (new device), create one
+      const identity = loginWithEmail(email) ?? registerWithEmail(email);
       const actor = await createActorWithConfig({ agentOptions: { identity } });
       await actor._initializeAccessControlWithSecret("");
 

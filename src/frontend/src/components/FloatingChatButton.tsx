@@ -1,5 +1,6 @@
 import { ArrowLeft, Image, MessageCircle, Mic, Send, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { ChatMessage } from "../backend.d";
 
 interface Props {
@@ -281,8 +282,13 @@ export default function FloatingChatButton({ actor }: Props) {
       setImagePreview(null);
       clearAudio();
       await loadMessages();
-    } catch {
-      // silent
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Unauthorized") || msg.includes("Only users")) {
+        toast.error("Please log in to send messages.");
+      } else {
+        toast.error("Message failed to send. Please try again.");
+      }
     } finally {
       setSending(false);
     }

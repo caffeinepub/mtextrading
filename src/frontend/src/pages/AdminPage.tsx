@@ -784,14 +784,38 @@ export default function AdminPage({
   const loadData = async () => {
     if (!actor) return;
     try {
-      const [u, a, o, i, wallets] = await Promise.all([
+      const [u, a, o, i, wallets, emailRegs] = await Promise.all([
         actor.getAllUsers(),
         actor.getAllAccounts(),
         actor.getAllOrders(),
         actor.getAllInstruments(),
         (actor as any).getCryptoWalletAddresses(),
+        (actor as any).getEmailRegistrations().catch(() => [] as string[]),
       ]);
-      setUsers(u);
+      // Merge email-only registrations (no profile yet) into user list
+      const profileEmails = new Set((u as UserEntry[]).map(([, p]) => p.email));
+      const incomplete: UserEntry[] = (emailRegs as string[])
+        .filter((email: string) => !profileEmails.has(email))
+        .map((email: string) => {
+          const stub: UserProfile = {
+            name: "",
+            email,
+            phone: "",
+            dateOfBirth: "",
+            country: "",
+            homeAddress: "",
+            accountType: AccountType.demo,
+            created: BigInt(0),
+            isBanned: false,
+            kycStatus: KycStatus.notSubmitted,
+            kycDocumentUrl: undefined,
+            kycNotes: undefined,
+          };
+          // Use a placeholder principal for email-only users
+          const placeholder = { toText: () => email } as unknown as Principal;
+          return [placeholder, stub] as UserEntry;
+        });
+      setUsers([...(u as UserEntry[]), ...incomplete]);
       setAccounts(a);
       setOrders(o);
       setInstruments(i);
@@ -1748,8 +1772,14 @@ export default function AdminPage({
                           data-ocid={`admin.user.item.${i + 1}`}
                           className="border-b border-white/5 hover:bg-white"
                         >
-                          <td className="px-4 py-3 text-white font-medium">
-                            {profile.name}
+                          <td className="px-4 py-3 font-medium">
+                            {profile.name ? (
+                              <span className="text-white">{profile.name}</span>
+                            ) : (
+                              <span className="text-gray-400 italic text-xs">
+                                Profile pending
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-gray-600">
                             {profile.email}

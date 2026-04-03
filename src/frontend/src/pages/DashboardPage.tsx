@@ -1124,7 +1124,6 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [pendingOrderAfterRisk, setPendingOrderAfterRisk] = useState<
     (() => Promise<void>) | null
   >(null);
-  const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Group 3: Promo code state for deposit ───────────────────────────────
   const [cryptoPromoCode, setCryptoPromoCode] = useState("");
@@ -1293,26 +1292,7 @@ export default function DashboardPage({ onNavigate }: Props) {
     };
   }, [livePrices]);
 
-  // ── Session timeout (30 min inactivity) ──────────────────────────────────
-  useEffect(() => {
-    const TIMEOUT_MS = 30 * 60 * 1000;
-    const resetTimer = () => {
-      if (sessionTimeoutRef.current) clearTimeout(sessionTimeoutRef.current);
-      sessionTimeoutRef.current = setTimeout(() => {
-        toast.error("Session expired. Please log in again.");
-        setTimeout(() => {
-          onNavigate("landing");
-        }, 1500);
-      }, TIMEOUT_MS);
-    };
-    const events: string[] = ["mousemove", "keydown", "touchstart", "scroll"];
-    for (const e of events) window.addEventListener(e, resetTimer);
-    resetTimer();
-    return () => {
-      for (const e of events) window.removeEventListener(e, resetTimer);
-      if (sessionTimeoutRef.current) clearTimeout(sessionTimeoutRef.current);
-    };
-  }, [onNavigate]);
+  // Session persists until manual logout (no inactivity timeout)
 
   useEffect(() => {
     if (!actor) return;
