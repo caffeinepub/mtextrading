@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function LoginPage({ onNavigate }: Props) {
-  const { loginWithEmail, registerWithEmail } = useEmailAuth();
+  const { setIdentityFromCredentials } = useEmailAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -58,7 +58,7 @@ export default function LoginPage({ onNavigate }: Props) {
       const hash = await hashPassword(password);
       const rawActor = await createRawActor();
 
-      // Check password
+      // Verify password against backend
       const valid = await (rawActor as any).verifyLoginPassword(email, hash);
       if (!valid) {
         setError("Incorrect email or password");
@@ -69,18 +69,18 @@ export default function LoginPage({ onNavigate }: Props) {
       const verified = await (rawActor as any).isEmailVerified(email);
       if (!verified) {
         setError(
-          "Please verify your email first. Check your inbox for the verification link.",
+          "Please verify your email first. Check your inbox for the verification code.",
         );
         return;
       }
 
-      // Load the dashboard with the email identity
-      // Try to reuse existing saved identity; if missing (new device), create one
-      const identity = loginWithEmail(email) ?? registerWithEmail(email);
+      // Derive deterministic identity from email + passwordHash
+      // This is the same on every device — no localStorage seed required
+      const identity = await setIdentityFromCredentials(email, hash);
       const actor = await createActorWithConfig({ agentOptions: { identity } });
       await actor._initializeAccessControlWithSecret("");
 
-      // Save remember me
+      // Save remember me preference
       if (rememberMe) {
         localStorage.setItem("mtex_remembered_email", email);
       } else {
@@ -102,7 +102,6 @@ export default function LoginPage({ onNavigate }: Props) {
       // Check 2FA
       const is2FAEnabled = localStorage.getItem("mtex_2fa_enabled") === "true";
       if (is2FAEnabled) {
-        // Show 2FA step - capture the navigation in a closure
         setPendingLoginAction(() => () => {
           try {
             const loginHistory: Array<{ timestamp: string; device: string }> =
@@ -209,7 +208,6 @@ export default function LoginPage({ onNavigate }: Props) {
             type="button"
             disabled={twoFAInput.length !== 6}
             onClick={() => {
-              // Accept any 6-digit code (demo/MVP)
               if (twoFAInput.length === 6) {
                 if (pendingLoginAction) {
                   pendingLoginAction();

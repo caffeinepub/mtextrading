@@ -9,49 +9,52 @@ import {
   useState,
 } from "react";
 
-const IDENTITY_KEY_PREFIX = "mtex_identity_";
 const CURRENT_EMAIL_KEY = "mtex_current_email";
 
-function saveIdentity(email: string, identity: Ed25519KeyIdentity) {
-  localStorage.setItem(
-    IDENTITY_KEY_PREFIX + email,
-    JSON.stringify(identity.toJSON()),
+/**
+ * Derive a deterministic Ed25519KeyIdentity from email + passwordHash.
+ * The seed is SHA-256(email + ":" + passwordHash) -- 32 bytes, always
+ * the same on any device as long as the credentials match.
+ */
+export async function deriveIdentityFromCredentials(
+  email: string,
+  passwordHash: string,
+): Promise<Ed25519KeyIdentity> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(
+    `${email.toLowerCase().trim()}:${passwordHash}:mtex_identity_v1`,
   );
-  localStorage.setItem(CURRENT_EMAIL_KEY, email);
-}
-
-function loadIdentityByEmail(email: string): Ed25519KeyIdentity | null {
-  const stored = localStorage.getItem(IDENTITY_KEY_PREFIX + email);
-  if (!stored) return null;
-  try {
-    return Ed25519KeyIdentity.fromJSON(stored);
-  } catch {
-    return null;
-  }
-}
-
-function loadCurrentIdentity(): {
-  identity: Ed25519KeyIdentity;
-  email: string;
-} | null {
-  const email = localStorage.getItem(CURRENT_EMAIL_KEY);
-  if (!email) return null;
-  const identity = loadIdentityByEmail(email);
-  if (!identity) return null;
-  return { identity, email };
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const seed = new Uint8Array(hashBuffer); // 32 bytes
+  return Ed25519KeyIdentity.generate(seed);
 }
 
 export type EmailAuthContext = {
   identity: Identity | null;
   currentEmail: string | null;
-  registerWithEmail: (email: string) => Ed25519KeyIdentity;
-  loginWithEmail: (email: string) => Ed25519KeyIdentity | null;
+  setIdentityFromCredentials: (
+    email: string,
+    passwordHash: string,
+  ) => Promise<Ed25519KeyIdentity>;
+  /** @deprecated use setIdentityFromCredentials for new code */
+  registerWithEmail: (
+    email: string,
+    passwordHash?: string,
+  ) => Ed25519KeyIdentity | Promise<Ed25519KeyIdentity>;
+  /** @deprecated use setIdentityFromCredentials for new code */
+  loginWithEmail: (
+    email: string,
+    passwordHash?: string,
+  ) => Ed25519KeyIdentity | null | Promise<Ed25519KeyIdentity | null>;
   logout: () => void;
 };
 
 const EmailAuthReactContext = createContext<EmailAuthContext>({
   identity: null,
   currentEmail: null,
+  setIdentityFromCredentials: async () => {
+    throw new Error("EmailAuthProvider not found");
+  },
   registerWithEmail: () => {
     throw new Error("EmailAuthProvider not found");
   },
@@ -69,30 +72,92 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
     email: string | null;
   }>({ identity: null, email: null });
 
+  // On mount: restore session from localStorage (email only — identity
+  // is re-derived on login, but we keep a cached copy for the session)
   useEffect(() => {
-    const loaded = loadCurrentIdentity();
-    if (loaded) {
-      setState({ identity: loaded.identity, email: loaded.email });
+    const email = localStorage.getItem(CURRENT_EMAIL_KEY);
+    const cachedSeed = email
+      ? localStorage.getItem(`mtex_identity_seed_${email}`)
+      : null;
+    if (email && cachedSeed) {
+      try {
+        const identity = Ed25519KeyIdentity.fromJSON(cachedSeed);
+        setState({ identity, email });
+      } catch {
+        // corrupted — ignore, user will re-login
+      }
     }
   }, []);
 
-  const registerWithEmail = (email: string): Ed25519KeyIdentity => {
-    // Reuse existing identity if one already exists for this email
-    let identity = loadIdentityByEmail(email);
-    if (!identity) {
-      identity = Ed25519KeyIdentity.generate();
-    }
-    saveIdentity(email, identity);
+  const setIdentityFromCredentials = async (
+    email: string,
+    passwordHash: string,
+  ): Promise<Ed25519KeyIdentity> => {
+    const identity = await deriveIdentityFromCredentials(email, passwordHash);
+    // Cache in localStorage so the session survives page refresh
+    localStorage.setItem(CURRENT_EMAIL_KEY, email);
+    localStorage.setItem(
+      `mtex_identity_seed_${email}`,
+      JSON.stringify(identity.toJSON()),
+    );
     setState({ identity, email });
     return identity;
   };
 
-  const loginWithEmail = (email: string): Ed25519KeyIdentity | null => {
-    const identity = loadIdentityByEmail(email);
-    if (!identity) return null;
+  // Backward-compat shims — callers that don't pass passwordHash fall back
+  // to the old localStorage-based lookup so existing sessions still work.
+  const registerWithEmail = (
+    email: string,
+    passwordHash?: string,
+  ): Ed25519KeyIdentity | Promise<Ed25519KeyIdentity> => {
+    if (passwordHash) {
+      return setIdentityFromCredentials(email, passwordHash);
+    }
+    // Legacy: try cache, otherwise generate random (old behaviour)
+    const cached =
+      localStorage.getItem(`mtex_identity_seed_${email}`) ||
+      localStorage.getItem(`mtex_identity_${email}`);
+    if (cached) {
+      try {
+        const identity = Ed25519KeyIdentity.fromJSON(cached);
+        localStorage.setItem(CURRENT_EMAIL_KEY, email);
+        localStorage.setItem(`mtex_identity_seed_${email}`, cached);
+        setState({ identity, email });
+        return identity;
+      } catch {
+        /* fall through */
+      }
+    }
+    const identity = Ed25519KeyIdentity.generate();
     localStorage.setItem(CURRENT_EMAIL_KEY, email);
+    localStorage.setItem(
+      `mtex_identity_seed_${email}`,
+      JSON.stringify(identity.toJSON()),
+    );
     setState({ identity, email });
     return identity;
+  };
+
+  const loginWithEmail = (
+    email: string,
+    passwordHash?: string,
+  ): Ed25519KeyIdentity | null | Promise<Ed25519KeyIdentity | null> => {
+    if (passwordHash) {
+      return setIdentityFromCredentials(email, passwordHash);
+    }
+    // Legacy: look up from cache
+    const cached =
+      localStorage.getItem(`mtex_identity_seed_${email}`) ||
+      localStorage.getItem(`mtex_identity_${email}`);
+    if (!cached) return null;
+    try {
+      const identity = Ed25519KeyIdentity.fromJSON(cached);
+      localStorage.setItem(CURRENT_EMAIL_KEY, email);
+      setState({ identity, email });
+      return identity;
+    } catch {
+      return null;
+    }
   };
 
   const logout = () => {
@@ -104,6 +169,7 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
     value: {
       identity: state.identity,
       currentEmail: state.email,
+      setIdentityFromCredentials,
       registerWithEmail,
       loginWithEmail,
       logout,

@@ -3,35 +3,36 @@ import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
 import { getSecretParameter } from "../utils/urlParams";
-import { useEmailAuth } from "./useEmailAuth";
 import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
-  const { identity: iiIdentity } = useInternetIdentity();
-  const { identity: emailIdentity } = useEmailAuth();
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
-
-  // Prefer Internet Identity; fall back to email identity
-  const identity = iiIdentity ?? emailIdentity;
-
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
     queryFn: async () => {
       const isAuthenticated = !!identity;
 
       if (!isAuthenticated) {
+        // Return anonymous actor if not authenticated
         return await createActorWithConfig();
       }
 
-      const actor = await createActorWithConfig({
-        agentOptions: { identity },
-      });
+      const actorOptions = {
+        agentOptions: {
+          identity,
+        },
+      };
+
+      const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
       await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
+    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
+    // This will cause the actor to be recreated when the identity changes
     enabled: true,
   });
 

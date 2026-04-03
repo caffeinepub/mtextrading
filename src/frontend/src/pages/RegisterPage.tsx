@@ -118,7 +118,7 @@ interface Props {
 type Step = "form" | "otp" | "profile";
 
 export default function RegisterPage({ onNavigate }: Props) {
-  const { registerWithEmail } = useEmailAuth();
+  const { setIdentityFromCredentials } = useEmailAuth();
 
   const [step, setStep] = useState<Step>("form");
   const [email, setEmail] = useState("");
@@ -139,11 +139,14 @@ export default function RegisterPage({ onNavigate }: Props) {
   const [homeAddress, setHomeAddress] = useState("");
   const [phone, setPhone] = useState("");
 
+  // Store the password hash so we can derive the same identity in profile step
+  const passwordHashRef = useRef<string>("");
+
   const actorRef = useRef<Awaited<
     ReturnType<typeof createActorWithConfig>
   > | null>(null);
 
-  // On mount: check if profile is pending
+  // On mount: check if profile is pending (returning from login with incomplete profile)
   useEffect(() => {
     const pendingStr = localStorage.getItem("mtex_pending_profile");
     if (pendingStr) {
@@ -151,9 +154,13 @@ export default function RegisterPage({ onNavigate }: Props) {
         const pending = JSON.parse(pendingStr) as {
           email: string;
           verified: boolean;
+          passwordHash?: string;
         };
         if (pending.verified && pending.email) {
           setEmail(pending.email);
+          if (pending.passwordHash) {
+            passwordHashRef.current = pending.passwordHash;
+          }
           setStep("profile");
         }
       } catch {
@@ -162,8 +169,9 @@ export default function RegisterPage({ onNavigate }: Props) {
     }
   }, []);
 
-  const getActor = async (emailAddr: string) => {
-    const identity = registerWithEmail(emailAddr);
+  // Build an actor using the deterministic identity derived from email+passwordHash
+  const getActor = async (emailAddr: string, pwHash: string) => {
+    const identity = await setIdentityFromCredentials(emailAddr, pwHash);
     const actor = await createActorWithConfig({ agentOptions: { identity } });
     await actor._initializeAccessControlWithSecret("");
     return actor;
@@ -207,6 +215,7 @@ export default function RegisterPage({ onNavigate }: Props) {
         return;
       }
       const hash = await hashPassword(password);
+      passwordHashRef.current = hash;
       // Register with password — this sends a verification code
       await (rawActor as any).registerWithPassword(email, hash);
       setStep("otp");
@@ -231,6 +240,15 @@ export default function RegisterPage({ onNavigate }: Props) {
       const success = await (rawActor as any).verifyOtp(email, otpCode);
       if (success) {
         toast.success("Email verified!");
+        // Persist passwordHash so profile step can derive the right identity
+        localStorage.setItem(
+          "mtex_pending_profile",
+          JSON.stringify({
+            email,
+            verified: true,
+            passwordHash: passwordHashRef.current,
+          }),
+        );
         setStep("profile");
       } else {
         toast.error("Invalid or expired code. Please try again.");
@@ -275,10 +293,18 @@ export default function RegisterPage({ onNavigate }: Props) {
       toast.error("Please enter your phone number");
       return;
     }
+    if (!passwordHashRef.current) {
+      toast.error(
+        "Session expired. Please log in again to complete your profile.",
+      );
+      onNavigate("login");
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const actor = actorRef.current ?? (await getActor(email));
+      const actor =
+        actorRef.current ?? (await getActor(email, passwordHashRef.current));
       actorRef.current = actor;
 
       // Create demo trading account if none exists
@@ -320,7 +346,7 @@ export default function RegisterPage({ onNavigate }: Props) {
     }
   };
 
-  // ── Profile Setup Step ────────────────────────────────────────────────────
+  // ── Profile Setup Step ─────────────────────────────────────────────
   if (step === "profile") {
     const profileValid =
       fullName.trim().length > 0 &&
@@ -481,7 +507,7 @@ export default function RegisterPage({ onNavigate }: Props) {
     );
   }
 
-  // ── OTP Verification Step ─────────────────────────────────────────────────
+  // ── OTP Verification Step ──────────────────────────────────────────
   if (step === "otp") {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center px-6">
@@ -576,7 +602,7 @@ export default function RegisterPage({ onNavigate }: Props) {
     );
   }
 
-  // ── Registration Form Step ─────────────────────────────────────────────────
+  // ── Registration Form Step ────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <div className="flex items-center justify-between px-4 pt-6 pb-2">
