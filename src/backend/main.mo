@@ -11,7 +11,7 @@ import Order "mo:core/Order";
 import Iter "mo:core/Iter";
 import Nat "mo:core/Nat";
 import Float "mo:core/Float";
-import Migration "migration";
+
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
 import AccessControl "authorization/access-control";
@@ -21,7 +21,7 @@ import _Storage "blob-storage/Storage";
 import EmailClient "email/emailClient";
 
 // Apply migration via with clause from Migration submodule
-(with migration = Migration.run)
+
 actor {
   // Enumeration Types
   public type AccountType = { #demo; #live };

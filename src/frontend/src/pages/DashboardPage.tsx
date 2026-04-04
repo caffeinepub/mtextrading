@@ -941,6 +941,7 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
+  const [depositHighlight, setDepositHighlight] = useState(false);
   const [createDemoLoading, setCreateDemoLoading] = useState(false);
   const [profileSubView, setProfileSubView] = useState<
     | null
@@ -4647,6 +4648,15 @@ export default function DashboardPage({ onNavigate }: Props) {
 
       {fundsSubTab === "deposit" && (
         <div>
+          {depositHighlight && (
+            <div className="mx-0 mb-4 px-4 py-3 rounded-xl bg-blue-50 border-2 border-blue-400 text-blue-800 text-sm font-semibold flex items-center gap-2 animate-pulse">
+              <span>💰</span>
+              <span>
+                Select a cryptocurrency below and deposit to activate your live
+                trading account!
+              </span>
+            </div>
+          )}
           {selectedCryptoCoin === null ? (
             <>
               {/* Promo Carousel */}
@@ -7806,10 +7816,9 @@ export default function DashboardPage({ onNavigate }: Props) {
                     onClick={() => {
                       setShowSwitchAccount(false);
                       setActiveTab("funds");
-                      toast.info(
-                        "Make a deposit to activate your live account",
-                        { duration: 4000 },
-                      );
+                      setFundsSubTab("deposit");
+                      setDepositHighlight(true);
+                      setTimeout(() => setDepositHighlight(false), 3000);
                     }}
                     className="w-full py-3 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
                   >
