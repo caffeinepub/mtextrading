@@ -1043,7 +1043,13 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   const [ownDeposits, setOwnDeposits] = useState<any[]>([]);
   const [pendingWithdrawals, setPendingWithdrawals] = useState<
-    { amount: number; method: string; timestamp: number; status: string }[]
+    {
+      amount: number;
+      method: string;
+      timestamp: number;
+      status: string;
+      requestId?: bigint;
+    }[]
   >([]);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -1325,9 +1331,10 @@ export default function DashboardPage({ onNavigate }: Props) {
       .catch(() => {});
   }, [actor]);
 
-  // Fetch own deposits separately
+  // Fetch own deposits and withdrawals from backend on actor load
   useEffect(() => {
     if (!actor) return;
+    // Load deposits
     actor
       .getOwnCryptoDepositRequests()
       .then((deps) => {
@@ -1336,6 +1343,30 @@ export default function DashboardPage({ onNavigate }: Props) {
             (a: any, b: any) => Number(b.timestamp) - Number(a.timestamp),
           ),
         );
+      })
+      .catch(() => {});
+    // Load withdrawal requests from backend so history persists after refresh
+    actor
+      .getOwnTransactions()
+      .then((txns) => {
+        const withdrawalTxns = txns
+          .filter(
+            (t: any) =>
+              String(t.transactionType) === "withdrawal" ||
+              String(t.transactionType) === "Withdrawal",
+          )
+          .sort((a: any, b: any) => Number(b.timestamp) - Number(a.timestamp));
+        if (withdrawalTxns.length > 0) {
+          setPendingWithdrawals(
+            withdrawalTxns.map((t: any) => ({
+              amount: t.amount,
+              method: "crypto",
+              timestamp: Number(t.timestamp) / 1_000_000,
+              status: String(t.status),
+              requestId: t.transactionId,
+            })),
+          );
+        }
       })
       .catch(() => {});
   }, [actor]);
@@ -1459,13 +1490,72 @@ export default function DashboardPage({ onNavigate }: Props) {
       const tp = tpEnabled && tpValue ? Number.parseFloat(tpValue) : 0;
       const sl = slEnabled && slValue ? Number.parseFloat(slValue) : 0;
       const lotSize = Number.parseFloat(orderQty);
-      let instrumentId = BigInt(1);
+      // Helper to map symbol to backend category variant
+      const getInstrumentCategory = (symbol: string): string => {
+        if (
+          [
+            "BTC/USD",
+            "ETH/USD",
+            "XRP/USD",
+            "BNB/USD",
+            "SOL/USD",
+            "AVAX/USD",
+            "ADA/USD",
+            "DOT/USD",
+            "MATIC/USD",
+            "LINK/USD",
+          ].includes(symbol)
+        )
+          return "crypto";
+        if (
+          ["XAUUSD", "XAGUSD", "Gold", "Silver"].some((s) => symbol.includes(s))
+        )
+          return "metals";
+        if (["OIL", "WTI", "BRENT", "Crude"].some((s) => symbol.includes(s)))
+          return "commodities";
+        if (
+          ["SPX500", "NDX100", "US30", "DAX40", "FTSE100"].some((s) =>
+            symbol.includes(s),
+          )
+        )
+          return "indices";
+        if (
+          ["AAPL", "TSLA", "MSFT", "AMZN", "GOOGL", "META", "NVDA"].some((s) =>
+            symbol.includes(s),
+          )
+        )
+          return "stocks";
+        return "forex";
+      };
+      let instrumentId: bigint;
       try {
         const inst = await actor.getInstrumentBySymbol(
           selectedInstrument.symbol,
         );
-        if (inst) instrumentId = inst.instrumentId;
-      } catch {}
+        if (inst) {
+          instrumentId = inst.instrumentId;
+        } else {
+          // Auto-create the instrument in the backend
+          const bidPrice = Number.parseFloat(
+            selectedInstrument.sellPrice.replace(/,/g, ""),
+          );
+          const askPrice = Number.parseFloat(
+            selectedInstrument.buyPrice.replace(/,/g, ""),
+          );
+          const cat = getInstrumentCategory(selectedInstrument.symbol);
+          const catVariant = { [cat]: null } as any;
+          const newId = await actor.createInstrument(
+            selectedInstrument.name,
+            selectedInstrument.symbol,
+            catVariant,
+            bidPrice,
+            askPrice,
+          );
+          instrumentId = BigInt(newId);
+        }
+      } catch {
+        instrumentId = BigInt(0);
+      }
       await actor.createOrder(
         activeAccount.accountId,
         instrumentId,
@@ -5206,15 +5296,35 @@ export default function DashboardPage({ onNavigate }: Props) {
                   data-ocid={`dashboard.withdrawal.item.${i + 1}`}
                   className="flex items-center justify-between py-3 border-b border-gray-100"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-amber-100 text-amber-700">
-                      Pending Withdrawal
-                    </span>
-                    <p className="text-xs text-gray-500">
-                      {wd.method === "crypto" ? "Crypto" : "Bank Transfer"} •{" "}
-                      {new Date(wd.timestamp).toLocaleDateString()}
-                    </p>
-                  </div>
+                  {(() => {
+                    const isWdCompleted =
+                      wd.status === "completed" || wd.status === "Completed";
+                    const isWdFailed =
+                      wd.status === "failed" || wd.status === "Failed";
+                    return (
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                            isWdCompleted
+                              ? "bg-green-100 text-green-700"
+                              : isWdFailed
+                                ? "bg-red-100 text-red-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {isWdCompleted
+                            ? "Withdrawal Completed"
+                            : isWdFailed
+                              ? "Withdrawal Failed"
+                              : "Pending Withdrawal"}
+                        </span>
+                        <p className="text-xs text-gray-500">
+                          {wd.method === "crypto" ? "Crypto" : "Bank Transfer"}{" "}
+                          • {new Date(wd.timestamp).toLocaleDateString()}
+                        </p>
+                      </div>
+                    );
+                  })()}
                   <p className="text-sm font-semibold text-red-600">
                     -$
                     {wd.amount.toLocaleString("en-US", {

@@ -771,7 +771,9 @@ actor {
       tradingAccounts.add(liveAcc.accountId, updatedLive);
     };
     // Notify the user their deposit was approved
-    addNotificationForUser(req.owner, "Deposit Approved!", "Your deposit of " # req.amount.toText() # " " # req.coin # " has been approved. Your account balance has been updated.", "deposit_approved");
+    let amountInt = req.amount.toInt();
+    let amountStr = "$" # amountInt.toText();
+    addNotificationForUser(req.owner, "Deposit Approved!", "Your deposit of " # amountStr # " has been approved. Your account balance has been updated.", "deposit_approved");
     // Send email notification
     let userEmail = switch (userProfiles.get(req.owner)) {
       case (?p) { p.email };
@@ -784,7 +786,7 @@ actor {
         [],
         [],
         "Your Mtextrading Account Has Been Funded",
-        "Congratulations!\n\nYour Mtextrading account has been successfully funded.\n\nAmount credited: " # req.amount.toText() # " " # req.coin # "\n\nYou are all set to start trading. Head to the Trade tab to place your first position across forex, crypto, stocks, and more.\n\nIf you did not authorize this deposit, please contact our support team immediately.\n\nThe Mtextrading Team"
+        "Congratulations!\n\nYour Mtextrading account has been successfully funded.\n\nAmount credited: " # amountStr # "\n\nYou are all set to start trading. Head to the Trade tab to place your first position across forex, crypto, stocks, and more.\n\nIf you did not authorize this deposit, please contact our support team immediately.\n\nThe Mtextrading Team"
       );
     };
   };
@@ -1564,7 +1566,9 @@ The Mtextrading Team"
   // Password-based Authentication
   // ============================================
 
-  let appBaseUrl = "https://mtextrading.caffeine.ai";
+  // App base URL for reset links
+  let appBaseUrl : Text = "https://mtextrading.caffeine.ai";
+  func getAppBaseUrl() : Text { appBaseUrl };
 
   // Generate a simple token from time + email
   func generateToken(seed : Text) : Text {
@@ -1683,7 +1687,7 @@ The Mtextrading Team"
     let token = generateToken(email # "reset");
     let expiry = Time.now() + 3_600_000_000_000; // 1 hour
     passwordResetTokens.add(token, { email = email; expiry = expiry });
-    let resetLink = appBaseUrl # "/#/reset-password?token=" # token;
+    let resetLink = getAppBaseUrl() # "/#/reset-password?token=" # token;
     let _ = await EmailClient.sendRawEmail(
       "no-reply",
       [email],

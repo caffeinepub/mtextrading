@@ -215,7 +215,7 @@ function AdjustBalanceDialog({
             <Select value={accountId} onValueChange={setAccountId}>
               <SelectTrigger
                 data-ocid="admin.adjust_balance.select"
-                className="bg-gray-50 border-gray-200 text-white mt-1"
+                className="bg-gray-50 border-gray-200 text-gray-900 mt-1"
               >
                 <SelectValue placeholder="Select account" />
               </SelectTrigger>
@@ -241,7 +241,7 @@ function AdjustBalanceDialog({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="e.g. 10000"
-              className="bg-gray-50 border-gray-200 text-white mt-1"
+              className="bg-gray-50 border-gray-200 text-gray-900 mt-1"
             />
           </div>
         </div>
