@@ -273,6 +273,7 @@ export interface backendInterface {
     getFullLeaderboard(): Promise<Array<LeaderboardEntry>>;
     getInstrumentByIdQuery(instrumentId: bigint): Promise<MarketInstrument | null>;
     getInstrumentBySymbol(symbol: string): Promise<MarketInstrument | null>;
+    getOrCreateInstrument(name: string, symbol: string, category: InstrumentCategory, bidPrice: number, askPrice: number): Promise<bigint>;
     getOwnAccounts(): Promise<Array<TradingAccount>>;
     getOwnChatMessages(): Promise<Array<ChatMessage>>;
     getOwnCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>>;
