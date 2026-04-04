@@ -4802,12 +4802,17 @@ export default function DashboardPage({ onNavigate }: Props) {
                           </button>
                         </div>
                         <div className="flex items-center justify-center my-4">
-                          <div className="w-32 h-32 bg-gray-900 rounded-xl flex items-center justify-center">
-                            <span className="text-white text-xs font-mono text-center px-2">
-                              QR Code
-                              <br />
-                              {selectedCryptoCoin.coin}
-                            </span>
+                          <div className="p-2 bg-white border border-gray-200 rounded-xl inline-block">
+                            <img
+                              src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(walletEntry.address)}`}
+                              alt={`${selectedCryptoCoin.coin} QR Code`}
+                              width={180}
+                              height={180}
+                              className="rounded"
+                            />
+                            <p className="text-[10px] text-gray-400 mt-1 text-center">
+                              {selectedCryptoCoin.coin} Address
+                            </p>
                           </div>
                         </div>
                       </div>

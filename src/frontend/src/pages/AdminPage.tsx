@@ -1774,7 +1774,9 @@ export default function AdminPage({
                         >
                           <td className="px-4 py-3 font-medium">
                             {profile.name ? (
-                              <span className="text-white">{profile.name}</span>
+                              <span className="text-gray-900 font-medium">
+                                {profile.name}
+                              </span>
                             ) : (
                               <span className="text-gray-400 italic text-xs">
                                 Profile pending
@@ -1796,7 +1798,7 @@ export default function AdminPage({
                             >
                               <SelectTrigger
                                 data-ocid={`admin.user_type.select.${i + 1}`}
-                                className="bg-gray-50 border-gray-200 text-white h-7 text-xs w-24"
+                                className="bg-gray-50 border-gray-200 text-gray-900 h-7 text-xs w-24"
                               >
                                 <SelectValue />
                               </SelectTrigger>
@@ -2487,7 +2489,7 @@ export default function AdminPage({
                                   <td className="px-4 py-3 text-gray-600">
                                     #{String(t.accountId)}
                                   </td>
-                                  <td className="px-4 py-3 text-right font-mono text-white">
+                                  <td className="px-4 py-3 text-right font-mono text-gray-900">
                                     $
                                     {t.amount.toLocaleString("en-US", {
                                       minimumFractionDigits: 2,
@@ -2558,6 +2560,11 @@ export default function AdminPage({
                           : String(w.status) === "approved"
                             ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
                             : "bg-red-500/20 text-red-400 border-red-500/30";
+                        const matchedUser = users.find(
+                          ([p]) => String(p) === String(w.owner),
+                        );
+                        const displayName = matchedUser?.[1]?.name || null;
+                        const displayEmail = matchedUser?.[1]?.email || null;
                         const owner = String(w.owner);
                         const shortOwner = `${owner.slice(0, 8)}...${owner.slice(-4)}`;
                         return (
@@ -2569,13 +2576,26 @@ export default function AdminPage({
                             <td className="px-4 py-3 font-mono text-gray-600">
                               #{String(w.requestId)}
                             </td>
-                            <td className="px-4 py-3 font-mono text-gray-500 text-xs">
-                              {shortOwner}
+                            <td className="px-4 py-3 text-xs">
+                              {displayName ? (
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {displayName}
+                                  </p>
+                                  <p className="text-gray-400">
+                                    {displayEmail}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="font-mono text-gray-500">
+                                  {shortOwner}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-gray-600">
                               #{String(w.accountId)}
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-white">
+                            <td className="px-4 py-3 text-right font-mono text-gray-900">
                               $
                               {w.amount.toLocaleString("en-US", {
                                 minimumFractionDigits: 2,
@@ -2596,6 +2616,17 @@ export default function AdminPage({
                                       </span>
                                       <p className="text-xs text-gray-500 truncate max-w-[120px]">
                                         {cryptoMatch[2]}
+                                        <button
+                                          type="button"
+                                          className="text-xs text-blue-600 hover:underline ml-1"
+                                          onClick={() =>
+                                            navigator.clipboard.writeText(
+                                              cryptoMatch[2],
+                                            )
+                                          }
+                                        >
+                                          Copy
+                                        </button>
                                       </p>
                                     </div>
                                   );
@@ -3341,12 +3372,24 @@ export default function AdminPage({
                     </thead>
                     <tbody>
                       {cryptoDeposits.map((dep: any, idx: number) => {
+                        const rawStatus = dep.status;
                         const statusStr =
-                          dep.status?.pending != null
+                          rawStatus?.pending != null
                             ? "pending"
-                            : dep.status?.approved != null
+                            : rawStatus?.approved != null
                               ? "approved"
-                              : "rejected";
+                              : rawStatus?.rejected != null
+                                ? "rejected"
+                                : String(rawStatus) === "pending"
+                                  ? "pending"
+                                  : String(rawStatus) === "approved"
+                                    ? "approved"
+                                    : "rejected";
+                        const depUser = users.find(
+                          ([p]) => String(p) === String(dep.owner),
+                        );
+                        const depUserName = depUser?.[1]?.name || null;
+                        const depUserEmail = depUser?.[1]?.email || null;
                         return (
                           <tr
                             key={String(dep.depositId)}
@@ -3357,7 +3400,20 @@ export default function AdminPage({
                               #{String(dep.depositId)}
                             </td>
                             <td className="px-4 py-3 text-gray-700 text-xs">
-                              {String(dep.owner).slice(0, 10)}...
+                              {depUserName ? (
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {depUserName}
+                                  </p>
+                                  <p className="text-gray-400 text-[10px]">
+                                    {depUserEmail}
+                                  </p>
+                                </div>
+                              ) : (
+                                <span className="font-mono">
+                                  {String(dep.owner).slice(0, 10)}...
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 font-semibold text-gray-900">
                               {dep.coin}

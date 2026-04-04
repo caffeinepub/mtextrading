@@ -12,14 +12,14 @@ export function useActor() {
   const { identity: emailIdentity } = useEmailAuth();
   const queryClient = useQueryClient();
 
-  // Prefer email identity over Internet Identity for email-authenticated users
+  // Use email identity preferentially, fall back to Internet Identity
   const identity = emailIdentity ?? iiIdentity;
 
   const actorQuery = useQuery<backendInterface>({
     queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
     queryFn: async () => {
       if (!identity) {
-        // Anonymous actor — no permissions
+        // Anonymous actor
         return await createActorWithConfig();
       }
 
@@ -34,18 +34,13 @@ export function useActor() {
     enabled: true,
   });
 
-  // When the actor changes, invalidate dependent queries
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
       queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
     }
   }, [actorQuery.data, queryClient]);
