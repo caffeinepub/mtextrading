@@ -11,6 +11,7 @@ import Order "mo:core/Order";
 import Iter "mo:core/Iter";
 import Nat "mo:core/Nat";
 import Float "mo:core/Float";
+import Migration "migration";
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
 import AccessControl "authorization/access-control";
@@ -20,7 +21,7 @@ import _Storage "blob-storage/Storage";
 import EmailClient "email/emailClient";
 
 // Apply migration via with clause from Migration submodule
-
+(with migration = Migration.run)
 actor {
   // Enumeration Types
   public type AccountType = { #demo; #live };
@@ -75,6 +76,7 @@ actor {
 
   type TradingAccount = {
     accountId : Nat;
+    accountCode : Text;
     owner : Principal;
     accountType : AccountType;
     currency : Text;
@@ -329,10 +331,17 @@ actor {
     userProfiles.add(caller, profile);
     addNotificationForUser(caller, "Profile Complete!", "Congratulations! Your profile is set up. Make your first deposit and start trading today.", "profile_complete");
     // Auto-create demo account if user has none
-    let existingDemoAccts = tradingAccounts.values().toArray().filter(func(a : TradingAccount) : Bool { a.owner == caller and a.accountType == #demo });
+    let existingDemoAccts = tradingAccounts.values().toArray().filter(
+      func(a) {
+        a.owner == caller and a.accountType == #demo
+      }
+    );
     if (existingDemoAccts.size() == 0) {
+      // Create new demo account
+      let accountCode = "DEMO-0000001";
       let demoAcc : TradingAccount = {
         accountId = nextAccountId;
+        accountCode;
         owner = caller;
         accountType = #demo;
         currency = "USD";
@@ -376,10 +385,123 @@ actor {
     userProfiles.add(caller, updatedProfile);
   };
 
-  // ============================================
-  // Platform Management
-  // ============================================
+  // Helper function to pad with zeros - moves trailing numbers to leading for account code formatting.
+  func padZeros(text : Text, totalLength : Nat) : Text {
+    let digits = text.size();
+    var pad = "";
+    var i = digits;
+    while (i < totalLength) { pad := pad # "0"; i += 1 };
+    pad # text;
+  };
 
+  // ======================
+  // Account Management
+  // ======================
+
+  // Create demo account for caller.
+  public shared ({ caller }) func createDemoAccount() : async TradingAccount {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can request demo accounts");
+    };
+    verifyUserNotBanned(caller);
+    // Count caller's existing demo accounts
+    let demoAccounts = tradingAccounts.values().toArray().filter(
+      func(a) { a.accountType == #demo and a.owner == caller }
+    );
+    let numDemoAccounts = demoAccounts.size();
+    if (numDemoAccounts >= 3) { Runtime.trap("Maximum 3 demo accounts per user") };
+    // Compose new account code
+    let accountNumber = numDemoAccounts + 1;
+    let accountCode = "DEMO-" # padZeros(accountNumber.toText(), 7);
+    // Create account
+    let account : TradingAccount = {
+      accountId = nextAccountId;
+      accountCode;
+      owner = caller;
+      accountType = #demo;
+      currency = "USD";
+      balance = 100000.0;
+      equity = 100000.0;
+      margin = 0.0;
+      freeMargin = 100000.0;
+    };
+    // Add to database and increment next id
+    tradingAccounts.add(nextAccountId, account);
+    nextAccountId += 1;
+    account;
+  };
+
+  // Create live account placeholder for caller
+  public shared ({ caller }) func createLiveAccountPlaceholder(currency : Text) : async TradingAccount {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can request live accounts");
+    };
+    verifyUserNotBanned(caller);
+    // Count caller's existing live accounts
+    let liveAccounts = tradingAccounts.values().toArray().filter(
+      func(a) { a.accountType == #live and a.owner == caller }
+    );
+    let numLiveAccounts = liveAccounts.size();
+    if (numLiveAccounts >= 3) { Runtime.trap("Maximum 3 live accounts per user") };
+    // Compose new live account code
+    let accountNumber = numLiveAccounts + 1;
+    let accountCode = "LIVE-" # padZeros(accountNumber.toText(), 7);
+    // Create account
+    let account : TradingAccount = {
+      accountId = nextAccountId;
+      accountCode;
+      owner = caller;
+      accountType = #live;
+      currency;
+      balance = 0.0;
+      equity = 0.0;
+      margin = 0.0;
+      freeMargin = 0.0;
+    };
+    // Add to database and increment next id
+    tradingAccounts.add(nextAccountId, account);
+    nextAccountId += 1;
+    account;
+  };
+
+  // Create trading account for caller.
+  public shared ({ caller }) func createTradingAccount(accountType : AccountType, currency : Text) : async TradingAccount {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can create trading accounts");
+    };
+    verifyUserNotBanned(caller);
+    let callerTypeAccounts = tradingAccounts.values().toArray().filter(
+      func(a) { a.accountType == accountType and a.owner == caller }
+    );
+    let accountNumber = callerTypeAccounts.size() + 1;
+    let baseCode = switch (accountType) {
+      case (#demo) { "DEMO-" };
+      case (#live) { "LIVE-" };
+    };
+    let accountCode = baseCode # padZeros(accountNumber.toText(), 7);
+    let startingBalance = switch (accountType) {
+      case (#demo) { 100000.0 };
+      case (#live) { 0.0 };
+    };
+    let account : TradingAccount = {
+      accountId = nextAccountId;
+      accountCode;
+      owner = caller;
+      accountType;
+      currency;
+      balance = startingBalance;
+      equity = startingBalance;
+      margin = 0.0;
+      freeMargin = startingBalance;
+    };
+    tradingAccounts.add(nextAccountId, account);
+    nextAccountId += 1;
+    account;
+  };
+
+  // ======================
+  // Platform Admin Functions
+  // ======================
   public query ({ caller }) func getPlatformSettings() : async PlatformSettings {
     verifyAdminAccess(caller);
     platformSettings;
@@ -598,6 +720,7 @@ actor {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can view their deposit requests");
     };
+    verifyUserNotBanned(caller);
     cryptoDepositRequests.values().toArray().filter(func(r) { r.owner == caller });
   };
 
@@ -610,12 +733,7 @@ actor {
     if (req.status != #pending) {
       Runtime.trap("Deposit is not pending");
     };
-    let account = switch (tradingAccounts.get(req.accountId)) {
-      case (null) { Runtime.trap("Account not found") };
-      case (?a) { a };
-    };
-    let updatedAccount = { account with balance = account.balance + req.amount };
-    tradingAccounts.add(req.accountId, updatedAccount);
+    let currentTime = Time.now();
     let updated = { req with status = #approved; notes = "Approved by admin" };
     cryptoDepositRequests.add(depositId, updated);
     let transaction : Transaction = {
@@ -623,20 +741,20 @@ actor {
       accountId = req.accountId;
       transactionType = #deposit;
       amount = req.amount;
-      timestamp = Time.now();
+      timestamp = currentTime;
       status = #completed;
     };
     transactions.add(nextTransactionId, transaction);
     nextTransactionId += 1;
-    // Auto-create live account on first approved deposit if user has none
-    let existingLiveAccts = tradingAccounts.values().toArray().filter(func(a : TradingAccount) : Bool { a.owner == req.owner and a.accountType == #live });
+    // Auto-create or credit live account on approved deposit
+    let existingLiveAccts = tradingAccounts.values().toArray().filter(
+      func(a) { a.owner == req.owner and a.accountType == #live }
+    );
     if (existingLiveAccts.size() == 0) {
-      // Generate a unique live account code like MT + 6 digits
-      let codeNum = (nextAccountId * 31337 + Int.abs(Time.now() / 1_000_000_000)) % 1000000;
-      let codeStr = codeNum.toText();
-      let codePadded = if (codeStr.size() < 6) { "0" # codeStr } else { codeStr };
-      let liveAcc : TradingAccount = {
+      let liveCode = "LIVE-0000001";
+      let newLive : TradingAccount = {
         accountId = nextAccountId;
+        accountCode = liveCode;
         owner = req.owner;
         accountType = #live;
         currency = "USD";
@@ -645,11 +763,9 @@ actor {
         margin = 0.0;
         freeMargin = req.amount;
       };
-      tradingAccounts.add(nextAccountId, liveAcc);
+      tradingAccounts.add(nextAccountId, newLive);
       nextAccountId += 1;
-      ignore codePadded;
     } else {
-      // Credit existing live account
       let liveAcc = existingLiveAccts[0];
       let updatedLive = { liveAcc with balance = liveAcc.balance + req.amount; equity = liveAcc.equity + req.amount; freeMargin = liveAcc.freeMargin + req.amount };
       tradingAccounts.add(liveAcc.accountId, updatedLive);
@@ -662,14 +778,13 @@ actor {
       case null { "" };
     };
     if (userEmail != "") {
-      let newBalance = account.balance + req.amount;
       let _ = await EmailClient.sendRawEmail(
         "no-reply",
         [userEmail],
         [],
         [],
         "Your Mtextrading Account Has Been Funded",
-        "Congratulations!\n\nYour Mtextrading account has been successfully funded.\n\nAmount credited: " # req.amount.toText() # " " # req.coin # "\nNew account balance: $" # newBalance.toText() # "\n\nYou are all set to start trading. Head to the Trade tab to place your first position across forex, crypto, stocks, and more.\n\nIf you did not authorize this deposit, please contact our support team immediately.\n\nThe Mtextrading Team"
+        "Congratulations!\n\nYour Mtextrading account has been successfully funded.\n\nAmount credited: " # req.amount.toText() # " " # req.coin # "\n\nYou are all set to start trading. Head to the Trade tab to place your first position across forex, crypto, stocks, and more.\n\nIf you did not authorize this deposit, please contact our support team immediately.\n\nThe Mtextrading Team"
       );
     };
   };
@@ -788,7 +903,9 @@ actor {
       Runtime.trap("Unauthorized: Only users can view accounts");
     };
     verifyUserNotBanned(caller);
-    tradingAccounts.values().toArray().filter(func(account) { account.owner == caller });
+    tradingAccounts.values().toArray().filter(
+      func(account) { account.owner == caller }
+    );
   };
 
   public query ({ caller }) func getOwnOrders() : async [TradeOrder] {
@@ -796,7 +913,9 @@ actor {
       Runtime.trap("Unauthorized: Only users can view orders");
     };
     verifyUserNotBanned(caller);
-    let ownAccountIds = tradingAccounts.values().toArray().filter(func(account) { account.owner == caller }).map(func(account) { account.accountId });
+    let ownAccountIds = tradingAccounts.values().toArray().filter(
+      func(account) { account.owner == caller }
+    ).map(func(account) { account.accountId });
     orders.values().toArray().filter(func(order) { ownAccountIds.values().contains(order.accountId) });
   };
 
@@ -805,32 +924,10 @@ actor {
       Runtime.trap("Unauthorized: Only users can view transactions");
     };
     verifyUserNotBanned(caller);
-    let ownAccountIds = tradingAccounts.values().toArray().filter(func(account) { account.owner == caller }).map(func(account) { account.accountId });
+    let ownAccountIds = tradingAccounts.values().toArray().filter(
+      func(account) { account.owner == caller }
+    ).map(func(account) { account.accountId });
     transactions.values().toArray().filter(func(tx) { ownAccountIds.values().contains(tx.accountId) });
-  };
-
-  public shared ({ caller }) func createTradingAccount(accountType : AccountType, currency : Text) : async TradingAccount {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can create accounts");
-    };
-    verifyUserNotBanned(caller);
-    let profile = switch (userProfiles.get(caller)) {
-      case (null) { Runtime.trap("User not registered") };
-      case (?p) { p };
-    };
-    let account : TradingAccount = {
-      accountId = nextAccountId;
-      owner = caller;
-      accountType;
-      currency;
-      balance = 0.0;
-      equity = 0.0;
-      margin = 0.0;
-      freeMargin = 0.0;
-    };
-    tradingAccounts.add(nextAccountId, account);
-    nextAccountId += 1;
-    account;
   };
 
   public shared ({ caller }) func createOrder(accountId : Nat, instrumentId : Nat, orderType : OrderType, lotSize : Float, openPrice : Float, stopLoss : Float, takeProfit : Float) : async Nat {
@@ -1245,6 +1342,7 @@ The Mtextrading Team"
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can send chat messages");
     };
+    verifyUserNotBanned(caller);
     let email = switch (userProfiles.get(caller)) {
       case (?p) { p.email };
       case null { "" };
@@ -1432,6 +1530,7 @@ The Mtextrading Team"
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       return [];
     };
+    verifyUserNotBanned(caller);
     notifications.values().toArray().filter(func(n) { n.owner == caller });
   };
 
@@ -1439,6 +1538,7 @@ The Mtextrading Team"
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized");
     };
+    verifyUserNotBanned(caller);
     for ((id, notif) in notifications.entries()) {
       if (notif.owner == caller) {
         notifications.add(id, { notif with isRead = true });

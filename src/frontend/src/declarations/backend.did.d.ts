@@ -12,21 +12,31 @@ import type { Principal } from '@icp-sdk/core/principal';
 
 export type AccountType = { 'demo' : null } |
   { 'live' : null };
+export interface AppNotification {
+  'id' : bigint,
+  'title' : string,
+  'notifType' : string,
+  'owner' : Principal,
+  'body' : string,
+  'isRead' : boolean,
+  'timestamp' : Time,
+}
+export interface BotConfig {
+  'depositFlowEnabled' : boolean,
+  'tradeFlowEnabled' : boolean,
+  'botName' : string,
+  'findProviderEnabled' : boolean,
+  'supportFlowEnabled' : boolean,
+  'greetingMessage' : string,
+  'voiceEnabled' : boolean,
+  'rules' : string,
+}
 export interface ChatConversation {
   'userEmail' : string,
   'lastMessageTime' : Time,
   'userId' : Principal,
   'lastMessage' : string,
   'unreadCount' : bigint,
-}
-export interface AppNotification {
-  'id' : bigint,
-  'title' : string,
-  'body' : string,
-  'timestamp' : Time,
-  'isRead' : boolean,
-  'notifType' : string,
-  'owner' : Principal,
 }
 export interface ChatMessage {
   'id' : bigint,
@@ -136,6 +146,7 @@ export interface TradingAccount {
   'accountId' : bigint,
   'owner' : Principal,
   'freeMargin' : number,
+  'accountCode' : string,
   'accountType' : AccountType,
   'currency' : string,
   'margin' : number,
@@ -233,15 +244,18 @@ export interface _SERVICE {
   'approveWithdrawalRequest' : ActorMethod<[bigint, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'banUser' : ActorMethod<[Principal], undefined>,
+  'checkEmailRegistered' : ActorMethod<[string], boolean>,
   'closeOrder' : ActorMethod<[bigint, number], undefined>,
   'createCheckoutSession' : ActorMethod<
     [Array<ShoppingItem>, string, string],
     string
   >,
+  'createDemoAccount' : ActorMethod<[], TradingAccount>,
   'createInstrument' : ActorMethod<
     [string, string, InstrumentCategory, number, number],
     bigint
   >,
+  'createLiveAccountPlaceholder' : ActorMethod<[string], TradingAccount>,
   'createOrder' : ActorMethod<
     [bigint, bigint, OrderType, number, number, number, number],
     bigint
@@ -256,10 +270,12 @@ export interface _SERVICE {
   'getAllTransactions' : ActorMethod<[], Array<Transaction>>,
   'getAllUsers' : ActorMethod<[], Array<[Principal, UserProfile]>>,
   'getAllWithdrawalRequests' : ActorMethod<[], Array<WithdrawalRequest>>,
+  'getBotConfig' : ActorMethod<[], BotConfig>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCryptoDepositRequests' : ActorMethod<[], Array<CryptoDepositRequest>>,
   'getCryptoWalletAddresses' : ActorMethod<[], Array<CryptoWalletAddress>>,
+  'getEmailRegistrations' : ActorMethod<[], Array<string>>,
   'getEnabledInstruments' : ActorMethod<[], Array<MarketInstrument>>,
   'getFinancialSummary' : ActorMethod<
     [],
@@ -275,9 +291,9 @@ export interface _SERVICE {
   'getInstrumentBySymbol' : ActorMethod<[string], [] | [MarketInstrument]>,
   'getOwnAccounts' : ActorMethod<[], Array<TradingAccount>>,
   'getOwnChatMessages' : ActorMethod<[], Array<ChatMessage>>,
-  'getOwnNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getOwnCryptoDepositRequests' : ActorMethod<[], Array<CryptoDepositRequest>>,
   'getOwnLeaderboardEntry' : ActorMethod<[], [] | [LeaderboardEntry]>,
+  'getOwnNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getOwnOrders' : ActorMethod<[], Array<TradeOrder>>,
   'getOwnTransactions' : ActorMethod<[], Array<Transaction>>,
   'getPlatformSettings' : ActorMethod<[], PlatformSettings>,
@@ -289,6 +305,7 @@ export interface _SERVICE {
   'getUserOrders' : ActorMethod<[Principal], Array<TradeOrder>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isEmailVerified' : ActorMethod<[string], boolean>,
   'isStaffAdmin' : ActorMethod<[string], boolean>,
   'isStripeConfigured' : ActorMethod<[], boolean>,
   'markConversationRead' : ActorMethod<[Principal], undefined>,
@@ -297,12 +314,18 @@ export interface _SERVICE {
     [string, string, string, string, string, string, AccountType],
     undefined
   >,
+  'registerWithPassword' : ActorMethod<[string, string], undefined>,
   'rejectCryptoDeposit' : ActorMethod<[bigint, string], undefined>,
   'rejectWithdrawalRequest' : ActorMethod<[bigint, string], undefined>,
   'removeCryptoWalletAddress' : ActorMethod<[string, string], undefined>,
   'removeStaffAdmin' : ActorMethod<[string], undefined>,
   'requestOtp' : ActorMethod<[string], undefined>,
-  'requestStaffOtp' : ActorMethod<[string], undefined>,
+  'requestStaffOtp' : ActorMethod<
+    [string],
+    { 'ok' : null } |
+      { 'err' : string }
+  >,
+  'resetPassword' : ActorMethod<[string, string], undefined>,
   'resetUserDemoBalance' : ActorMethod<[Principal, bigint], undefined>,
   'reviewKycDocument' : ActorMethod<[Principal, KycStatus, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<
@@ -319,6 +342,8 @@ export interface _SERVICE {
     [string, [] | [Uint8Array], [] | [Uint8Array]],
     bigint
   >,
+  'sendPasswordResetEmail' : ActorMethod<[string], undefined>,
+  'setBotConfig' : ActorMethod<[BotConfig], undefined>,
   'setCryptoWalletAddress' : ActorMethod<[string, string, string], undefined>,
   'setPlatformSettings' : ActorMethod<[PlatformSettings], undefined>,
   'setStripeConfiguration' : ActorMethod<[StripeConfiguration], undefined>,
@@ -339,16 +364,11 @@ export interface _SERVICE {
     undefined
   >,
   'upgradeUserAccountType' : ActorMethod<[Principal, AccountType], undefined>,
+  'verifyEmailToken' : ActorMethod<[string], string>,
+  'verifyLoginPassword' : ActorMethod<[string, string], boolean>,
   'verifyOtp' : ActorMethod<[string, string], boolean>,
   'verifyRegistrationOtp' : ActorMethod<[string, string], boolean>,
   'verifyStaffOtp' : ActorMethod<[string, string], boolean>,
-  'checkEmailRegistered' : ActorMethod<[string], boolean>,
-  'isEmailVerified' : ActorMethod<[string], boolean>,
-  'registerWithPassword' : ActorMethod<[string, string], undefined>,
-  'verifyEmailToken' : ActorMethod<[string], string>,
-  'verifyLoginPassword' : ActorMethod<[string, string], boolean>,
-  'sendPasswordResetEmail' : ActorMethod<[string], undefined>,
-  'resetPassword' : ActorMethod<[string, string], undefined>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

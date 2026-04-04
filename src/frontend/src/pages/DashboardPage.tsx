@@ -941,6 +941,7 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSwitchAccount, setShowSwitchAccount] = useState(false);
+  const [createDemoLoading, setCreateDemoLoading] = useState(false);
   const [profileSubView, setProfileSubView] = useState<
     | null
     | "kyc"
@@ -1663,8 +1664,8 @@ export default function DashboardPage({ onNavigate }: Props) {
         },
       )
     : "January 2024";
-  const accountNumber = activeAccount
-    ? String(activeAccount.accountId)
+  const accountNumber = activeAccount?.accountCode
+    ? activeAccount.accountCode
     : "0000000";
   const kycStatus = profile?.kycStatus;
   const showKycForm =
@@ -4902,13 +4903,42 @@ export default function DashboardPage({ onNavigate }: Props) {
                                     }
                                   } catch {}
                                 }
+                                // If currently on demo, create a live account placeholder first
+                                let depositAccountId = activeAcct.accountId;
+                                const isOnDemo =
+                                  String(activeAcct.accountType) === "demo";
+                                if (isOnDemo) {
+                                  try {
+                                    const liveAcc =
+                                      await actor.createLiveAccountPlaceholder(
+                                        activeAcct.currency || "USD",
+                                      );
+                                    depositAccountId = liveAcc.accountId;
+                                  } catch {
+                                    // live account may already exist, use first live account
+                                    const allAccs =
+                                      await actor.getOwnAccounts();
+                                    const liveAccs = allAccs.filter(
+                                      (a: any) =>
+                                        String(a.accountType) === "live",
+                                    );
+                                    if (liveAccs.length > 0) {
+                                      depositAccountId =
+                                        liveAccs[liveAccs.length - 1].accountId;
+                                    }
+                                  }
+                                }
                                 await (actor as any).submitCryptoDepositRequest(
-                                  activeAcct.accountId,
+                                  depositAccountId,
                                   selectedCryptoCoin.coin,
                                   selectedCryptoCoin.network,
                                   amount,
                                   walletEntry.address,
                                 );
+                                // Refresh accounts after deposit submission
+                                const refreshedAccs =
+                                  await actor.getOwnAccounts();
+                                setAccounts(refreshedAccs);
                                 addLocalNotif(
                                   "Deposit Submitted",
                                   `Your ${cryptoDepositAmount} ${selectedCryptoCoin?.coin || ""} deposit is pending review.${promoBonus}`,
@@ -7697,7 +7727,14 @@ export default function DashboardPage({ onNavigate }: Props) {
                             })()}
                           </div>
                           <p className="text-xs text-gray-500">
-                            #{String(acc.accountId)}
+                            {acc.accountCode || `#${String(acc.accountId)}`}
+                          </p>
+                          <p className="text-xs font-semibold text-gray-700">
+                            $
+                            {acc.balance.toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </p>
                         </div>
                       </div>
@@ -7730,6 +7767,55 @@ export default function DashboardPage({ onNavigate }: Props) {
                     No accounts found
                   </div>
                 )}
+
+                {/* ── Create Account Buttons ── */}
+                <div className="mt-3 space-y-2 pb-2">
+                  <button
+                    type="button"
+                    data-ocid="dashboard.switch_account.create_demo.button"
+                    disabled={createDemoLoading}
+                    onClick={async () => {
+                      if (!actor) return;
+                      setCreateDemoLoading(true);
+                      try {
+                        await actor.createDemoAccount();
+                        const newAccounts = await actor.getOwnAccounts();
+                        setAccounts(newAccounts);
+                        setActiveAccountIdx(newAccounts.length - 1);
+                        setShowSwitchAccount(false);
+                        toast.success("Demo account created with $100,000");
+                      } catch (e: unknown) {
+                        toast.error(
+                          e instanceof Error
+                            ? e.message
+                            : "Failed to create demo account",
+                        );
+                      } finally {
+                        setCreateDemoLoading(false);
+                      }
+                    }}
+                    className="w-full py-3 rounded-xl text-sm font-semibold border-2 border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                  >
+                    {createDemoLoading
+                      ? "Creating..."
+                      : "+ Create Demo Account"}
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="dashboard.switch_account.create_live.button"
+                    onClick={() => {
+                      setShowSwitchAccount(false);
+                      setActiveTab("funds");
+                      toast.info(
+                        "Make a deposit to activate your live account",
+                        { duration: 4000 },
+                      );
+                    }}
+                    className="w-full py-3 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    + Create Live Account
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>
@@ -7762,6 +7848,11 @@ export default function DashboardPage({ onNavigate }: Props) {
           {activeAccount && String(activeAccount.accountType) === "demo" && (
             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
               DEMO
+            </span>
+          )}
+          {activeAccount && String(activeAccount.accountType) === "live" && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 shrink-0">
+              LIVE
             </span>
           )}
           <ChevronDown size={12} className="text-gray-500" />

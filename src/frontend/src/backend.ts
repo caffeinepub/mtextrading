@@ -137,16 +137,6 @@ export interface PlatformSettings {
     stocksHours: string;
     maxDeposit: number;
 }
-export interface BotConfig {
-    botName: string;
-    greetingMessage: string;
-    rules: string;
-    voiceEnabled: boolean;
-    findProviderEnabled: boolean;
-    depositFlowEnabled: boolean;
-    tradeFlowEnabled: boolean;
-    supportFlowEnabled: boolean;
-}
 export interface Transaction {
     status: TransactionStatus;
     transactionType: TransactionType;
@@ -177,11 +167,11 @@ export interface TransformationInput {
 export interface AppNotification {
     id: bigint;
     title: string;
-    body: string;
-    timestamp: Time;
-    isRead: boolean;
     notifType: string;
     owner: Principal;
+    body: string;
+    isRead: boolean;
+    timestamp: Time;
 }
 export interface ChatMessage {
     id: bigint;
@@ -214,10 +204,21 @@ export interface TradingAccount {
     accountId: bigint;
     owner: Principal;
     freeMargin: number;
+    accountCode: string;
     accountType: AccountType;
     currency: string;
     margin: number;
     equity: number;
+}
+export interface BotConfig {
+    depositFlowEnabled: boolean;
+    tradeFlowEnabled: boolean;
+    botName: string;
+    findProviderEnabled: boolean;
+    supportFlowEnabled: boolean;
+    greetingMessage: string;
+    voiceEnabled: boolean;
+    rules: string;
 }
 export interface CryptoWalletAddress {
     coin: string;
@@ -339,9 +340,12 @@ export interface backendInterface {
     approveWithdrawalRequest(requestId: bigint, notes: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     banUser(user: Principal): Promise<void>;
+    checkEmailRegistered(email: string): Promise<boolean>;
     closeOrder(orderId: bigint, closePrice: number): Promise<void>;
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
+    createDemoAccount(): Promise<TradingAccount>;
     createInstrument(name: string, symbol: string, category: InstrumentCategory, bidPrice: number, askPrice: number): Promise<bigint>;
+    createLiveAccountPlaceholder(currency: string): Promise<TradingAccount>;
     createOrder(accountId: bigint, instrumentId: bigint, orderType: OrderType, lotSize: number, openPrice: number, stopLoss: number, takeProfit: number): Promise<bigint>;
     createTradingAccount(accountType: AccountType, currency: string): Promise<TradingAccount>;
     deleteUser(user: Principal): Promise<void>;
@@ -353,10 +357,12 @@ export interface backendInterface {
     getAllTransactions(): Promise<Array<Transaction>>;
     getAllUsers(): Promise<Array<[Principal, UserProfile]>>;
     getAllWithdrawalRequests(): Promise<Array<WithdrawalRequest>>;
+    getBotConfig(): Promise<BotConfig>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>>;
     getCryptoWalletAddresses(): Promise<Array<CryptoWalletAddress>>;
+    getEmailRegistrations(): Promise<Array<string>>;
     getEnabledInstruments(): Promise<Array<MarketInstrument>>;
     getFinancialSummary(): Promise<{
         revenue: number;
@@ -369,12 +375,11 @@ export interface backendInterface {
     getInstrumentBySymbol(symbol: string): Promise<MarketInstrument | null>;
     getOwnAccounts(): Promise<Array<TradingAccount>>;
     getOwnChatMessages(): Promise<Array<ChatMessage>>;
-    getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>>;
     getOwnLeaderboardEntry(): Promise<LeaderboardEntry | null>;
+    getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnOrders(): Promise<Array<TradeOrder>>;
     getOwnTransactions(): Promise<Array<Transaction>>;
-    getBotConfig(): Promise<BotConfig>;
     getPlatformSettings(): Promise<PlatformSettings>;
     getStaffAdmins(): Promise<Array<string>>;
     getStripeSessionStatus(sessionId: string): Promise<StripeSessionStatus>;
@@ -384,17 +389,26 @@ export interface backendInterface {
     getUserOrders(user: Principal): Promise<Array<TradeOrder>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    isEmailVerified(email: string): Promise<boolean>;
     isStaffAdmin(email: string): Promise<boolean>;
     isStripeConfigured(): Promise<boolean>;
     markConversationRead(userId: Principal): Promise<void>;
     markNotificationsRead(): Promise<void>;
     registerUser(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string, accountType: AccountType): Promise<void>;
+    registerWithPassword(email: string, passwordHash: string): Promise<void>;
     rejectCryptoDeposit(depositId: bigint, notes: string): Promise<void>;
     rejectWithdrawalRequest(requestId: bigint, notes: string): Promise<void>;
     removeCryptoWalletAddress(coin: string, network: string): Promise<void>;
     removeStaffAdmin(email: string): Promise<void>;
     requestOtp(email: string): Promise<void>;
-    requestStaffOtp(email: string): Promise<void>;
+    requestStaffOtp(email: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    resetPassword(token: string, newPasswordHash: string): Promise<void>;
     resetUserDemoBalance(user: Principal, accountId: bigint): Promise<void>;
     reviewKycDocument(user: Principal, status: KycStatus, notes: string): Promise<void>;
     saveCallerUserProfile(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string, accountType: AccountType): Promise<void>;
@@ -402,8 +416,9 @@ export interface backendInterface {
     sendAnnouncementToAll(subject: string, body: string): Promise<void>;
     sendAnnouncementToUser(toEmail: string, subject: string, body: string): Promise<void>;
     sendChatMessage(content: string, imageData: Uint8Array | null, audioData: Uint8Array | null): Promise<bigint>;
-    setCryptoWalletAddress(coin: string, network: string, address: string): Promise<void>;
+    sendPasswordResetEmail(email: string): Promise<void>;
     setBotConfig(config: BotConfig): Promise<void>;
+    setCryptoWalletAddress(coin: string, network: string, address: string): Promise<void>;
     setPlatformSettings(settings: PlatformSettings): Promise<void>;
     setStripeConfiguration(config: StripeConfiguration): Promise<void>;
     submitCryptoDepositRequest(accountId: bigint, coin: string, network: string, amount: number, walletAddress: string): Promise<bigint>;
@@ -417,10 +432,13 @@ export interface backendInterface {
     updateInstrumentPrices(instrumentId: string, bidPrice: number, askPrice: number): Promise<void>;
     updateUserProfile(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string): Promise<void>;
     upgradeUserAccountType(user: Principal, accountType: AccountType): Promise<void>;
+    verifyEmailToken(token: string): Promise<string>;
+    verifyLoginPassword(email: string, passwordHash: string): Promise<boolean>;
     verifyOtp(email: string, code: string): Promise<boolean>;
+    verifyRegistrationOtp(email: string, code: string): Promise<boolean>;
     verifyStaffOtp(email: string, code: string): Promise<boolean>;
 }
-import type { AppNotification as _AppNotification, AccountType as _AccountType, ChatMessage as _ChatMessage, CryptoDepositRequest as _CryptoDepositRequest, CryptoDepositStatus as _CryptoDepositStatus, InstrumentCategory as _InstrumentCategory, KycStatus as _KycStatus, LeaderboardEntry as _LeaderboardEntry, MarketInstrument as _MarketInstrument, OrderStatus as _OrderStatus, OrderType as _OrderType, StripeSessionStatus as _StripeSessionStatus, Time as _Time, TradeOrder as _TradeOrder, TradingAccount as _TradingAccount, Transaction as _Transaction, TransactionStatus as _TransactionStatus, TransactionType as _TransactionType, UserProfile as _UserProfile, UserRole as _UserRole, WithdrawalRequest as _WithdrawalRequest, WithdrawalRequestStatus as _WithdrawalRequestStatus, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
+import type { AccountType as _AccountType, ChatMessage as _ChatMessage, CryptoDepositRequest as _CryptoDepositRequest, CryptoDepositStatus as _CryptoDepositStatus, InstrumentCategory as _InstrumentCategory, KycStatus as _KycStatus, LeaderboardEntry as _LeaderboardEntry, MarketInstrument as _MarketInstrument, OrderStatus as _OrderStatus, OrderType as _OrderType, StripeSessionStatus as _StripeSessionStatus, Time as _Time, TradeOrder as _TradeOrder, TradingAccount as _TradingAccount, Transaction as _Transaction, TransactionStatus as _TransactionStatus, TransactionType as _TransactionType, UserProfile as _UserProfile, UserRole as _UserRole, WithdrawalRequest as _WithdrawalRequest, WithdrawalRequestStatus as _WithdrawalRequestStatus, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
     constructor(private actor: ActorSubclass<_SERVICE>, private _uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, private _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, private processError?: (error: unknown) => never){}
     async _caffeineStorageBlobIsLive(arg0: Uint8Array): Promise<boolean> {
@@ -605,6 +623,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async checkEmailRegistered(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.checkEmailRegistered(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.checkEmailRegistered(arg0);
+            return result;
+        }
+    }
     async closeOrder(arg0: bigint, arg1: number): Promise<void> {
         if (this.processError) {
             try {
@@ -633,46 +665,74 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async createDemoAccount(): Promise<TradingAccount> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createDemoAccount();
+                return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createDemoAccount();
+            return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async createInstrument(arg0: string, arg1: string, arg2: InstrumentCategory, arg3: number, arg4: number): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.createInstrument(arg0, arg1, to_candid_InstrumentCategory_n10(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
+                const result = await this.actor.createInstrument(arg0, arg1, to_candid_InstrumentCategory_n14(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createInstrument(arg0, arg1, to_candid_InstrumentCategory_n10(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
+            const result = await this.actor.createInstrument(arg0, arg1, to_candid_InstrumentCategory_n14(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
             return result;
+        }
+    }
+    async createLiveAccountPlaceholder(arg0: string): Promise<TradingAccount> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.createLiveAccountPlaceholder(arg0);
+                return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.createLiveAccountPlaceholder(arg0);
+            return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
         }
     }
     async createOrder(arg0: bigint, arg1: bigint, arg2: OrderType, arg3: number, arg4: number, arg5: number, arg6: number): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.createOrder(arg0, arg1, to_candid_OrderType_n12(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
+                const result = await this.actor.createOrder(arg0, arg1, to_candid_OrderType_n16(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createOrder(arg0, arg1, to_candid_OrderType_n12(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
+            const result = await this.actor.createOrder(arg0, arg1, to_candid_OrderType_n16(this._uploadFile, this._downloadFile, arg2), arg3, arg4, arg5, arg6);
             return result;
         }
     }
     async createTradingAccount(arg0: AccountType, arg1: string): Promise<TradingAccount> {
         if (this.processError) {
             try {
-                const result = await this.actor.createTradingAccount(to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg0), arg1);
-                return from_candid_TradingAccount_n16(this._uploadFile, this._downloadFile, result);
+                const result = await this.actor.createTradingAccount(to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg0), arg1);
+                return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.createTradingAccount(to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg0), arg1);
-            return from_candid_TradingAccount_n16(this._uploadFile, this._downloadFile, result);
+            const result = await this.actor.createTradingAccount(to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg0), arg1);
+            return from_candid_TradingAccount_n10(this._uploadFile, this._downloadFile, result);
         }
     }
     async deleteUser(arg0: Principal): Promise<void> {
@@ -801,6 +861,20 @@ export class Backend implements backendInterface {
             return from_candid_vec_n49(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getBotConfig(): Promise<BotConfig> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getBotConfig();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getBotConfig();
+            return result;
+        }
+    }
     async getCallerUserProfile(): Promise<UserProfile | null> {
         if (this.processError) {
             try {
@@ -854,6 +928,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getCryptoWalletAddresses();
+            return result;
+        }
+    }
+    async getEmailRegistrations(): Promise<Array<string>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getEmailRegistrations();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getEmailRegistrations();
             return result;
         }
     }
@@ -960,20 +1048,6 @@ export class Backend implements backendInterface {
             return from_candid_vec_n66(this._uploadFile, this._downloadFile, result);
         }
     }
-    async getOwnNotifications(): Promise<Array<AppNotification>> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getOwnNotifications();
-                return result.map((n: any) => ({ id: n.id, title: n.title, body: n.body, timestamp: n.timestamp, isRead: n.isRead, notifType: n.notifType, owner: n.owner }));
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getOwnNotifications();
-            return result.map((n: any) => ({ id: n.id, title: n.title, body: n.body, timestamp: n.timestamp, isRead: n.isRead, notifType: n.notifType, owner: n.owner }));
-        }
-    }
     async getOwnCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>> {
         if (this.processError) {
             try {
@@ -1002,6 +1076,20 @@ export class Backend implements backendInterface {
             return from_candid_opt_n70(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getOwnNotifications(): Promise<Array<AppNotification>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOwnNotifications();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOwnNotifications();
+            return result;
+        }
+    }
     async getOwnOrders(): Promise<Array<TradeOrder>> {
         if (this.processError) {
             try {
@@ -1028,20 +1116,6 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getOwnTransactions();
             return from_candid_vec_n35(this._uploadFile, this._downloadFile, result);
-        }
-    }
-    async getBotConfig(): Promise<BotConfig> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.getBotConfig();
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.getBotConfig();
-            return result;
         }
     }
     async getPlatformSettings(): Promise<PlatformSettings> {
@@ -1170,6 +1244,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async isEmailVerified(arg0: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isEmailVerified(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isEmailVerified(arg0);
+            return result;
+        }
+    }
     async isStaffAdmin(arg0: string): Promise<boolean> {
         if (this.processError) {
             try {
@@ -1229,14 +1317,28 @@ export class Backend implements backendInterface {
     async registerUser(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: AccountType): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg6));
+                const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg6));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg6));
+            const result = await this.actor.registerUser(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg6));
+            return result;
+        }
+    }
+    async registerWithPassword(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerWithPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerWithPassword(arg0, arg1);
             return result;
         }
     }
@@ -1310,17 +1412,37 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async requestStaffOtp(arg0: string): Promise<void> {
+    async requestStaffOtp(arg0: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }> {
         if (this.processError) {
             try {
                 const result = await this.actor.requestStaffOtp(arg0);
-                return result;
+                return from_candid_variant_n74(this._uploadFile, this._downloadFile, result);
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
             const result = await this.actor.requestStaffOtp(arg0);
+            return from_candid_variant_n74(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async resetPassword(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.resetPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.resetPassword(arg0, arg1);
             return result;
         }
     }
@@ -1341,42 +1463,42 @@ export class Backend implements backendInterface {
     async reviewKycDocument(arg0: Principal, arg1: KycStatus, arg2: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.reviewKycDocument(arg0, to_candid_KycStatus_n74(this._uploadFile, this._downloadFile, arg1), arg2);
+                const result = await this.actor.reviewKycDocument(arg0, to_candid_KycStatus_n75(this._uploadFile, this._downloadFile, arg1), arg2);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.reviewKycDocument(arg0, to_candid_KycStatus_n74(this._uploadFile, this._downloadFile, arg1), arg2);
+            const result = await this.actor.reviewKycDocument(arg0, to_candid_KycStatus_n75(this._uploadFile, this._downloadFile, arg1), arg2);
             return result;
         }
     }
     async saveCallerUserProfile(arg0: string, arg1: string, arg2: string, arg3: string, arg4: string, arg5: string, arg6: AccountType): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg6));
+                const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg6));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg6));
+            const result = await this.actor.saveCallerUserProfile(arg0, arg1, arg2, arg3, arg4, arg5, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg6));
             return result;
         }
     }
     async sendAdminReply(arg0: Principal, arg1: string, arg2: Uint8Array | null, arg3: Uint8Array | null): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.sendAdminReply(arg0, arg1, to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg3));
+                const result = await this.actor.sendAdminReply(arg0, arg1, to_candid_opt_n77(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n77(this._uploadFile, this._downloadFile, arg3));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.sendAdminReply(arg0, arg1, to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg3));
+            const result = await this.actor.sendAdminReply(arg0, arg1, to_candid_opt_n77(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n77(this._uploadFile, this._downloadFile, arg3));
             return result;
         }
     }
@@ -1411,28 +1533,28 @@ export class Backend implements backendInterface {
     async sendChatMessage(arg0: string, arg1: Uint8Array | null, arg2: Uint8Array | null): Promise<bigint> {
         if (this.processError) {
             try {
-                const result = await this.actor.sendChatMessage(arg0, to_candid_opt_n76(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2));
+                const result = await this.actor.sendChatMessage(arg0, to_candid_opt_n77(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n77(this._uploadFile, this._downloadFile, arg2));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.sendChatMessage(arg0, to_candid_opt_n76(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n76(this._uploadFile, this._downloadFile, arg2));
+            const result = await this.actor.sendChatMessage(arg0, to_candid_opt_n77(this._uploadFile, this._downloadFile, arg1), to_candid_opt_n77(this._uploadFile, this._downloadFile, arg2));
             return result;
         }
     }
-    async setCryptoWalletAddress(arg0: string, arg1: string, arg2: string): Promise<void> {
+    async sendPasswordResetEmail(arg0: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.setCryptoWalletAddress(arg0, arg1, arg2);
+                const result = await this.actor.sendPasswordResetEmail(arg0);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.setCryptoWalletAddress(arg0, arg1, arg2);
+            const result = await this.actor.sendPasswordResetEmail(arg0);
             return result;
         }
     }
@@ -1447,6 +1569,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.setBotConfig(arg0);
+            return result;
+        }
+    }
+    async setCryptoWalletAddress(arg0: string, arg1: string, arg2: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setCryptoWalletAddress(arg0, arg1, arg2);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setCryptoWalletAddress(arg0, arg1, arg2);
             return result;
         }
     }
@@ -1621,14 +1757,42 @@ export class Backend implements backendInterface {
     async upgradeUserAccountType(arg0: Principal, arg1: AccountType): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.upgradeUserAccountType(arg0, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.upgradeUserAccountType(arg0, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.upgradeUserAccountType(arg0, to_candid_AccountType_n14(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.upgradeUserAccountType(arg0, to_candid_AccountType_n18(this._uploadFile, this._downloadFile, arg1));
+            return result;
+        }
+    }
+    async verifyEmailToken(arg0: string): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyEmailToken(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyEmailToken(arg0);
+            return result;
+        }
+    }
+    async verifyLoginPassword(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyLoginPassword(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyLoginPassword(arg0, arg1);
             return result;
         }
     }
@@ -1643,6 +1807,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.verifyOtp(arg0, arg1);
+            return result;
+        }
+    }
+    async verifyRegistrationOtp(arg0: string, arg1: string): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.verifyRegistrationOtp(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.verifyRegistrationOtp(arg0, arg1);
             return result;
         }
     }
@@ -1661,8 +1839,8 @@ export class Backend implements backendInterface {
         }
     }
 }
-function from_candid_AccountType_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AccountType): AccountType {
-    return from_candid_variant_n19(_uploadFile, _downloadFile, value);
+function from_candid_AccountType_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _AccountType): AccountType {
+    return from_candid_variant_n13(_uploadFile, _downloadFile, value);
 }
 function from_candid_ChatMessage_n67(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _ChatMessage): ChatMessage {
     return from_candid_record_n68(_uploadFile, _downloadFile, value);
@@ -1697,8 +1875,8 @@ function from_candid_StripeSessionStatus_n71(_uploadFile: (file: ExternalBlob) =
 function from_candid_TradeOrder_n27(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _TradeOrder): TradeOrder {
     return from_candid_record_n28(_uploadFile, _downloadFile, value);
 }
-function from_candid_TradingAccount_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _TradingAccount): TradingAccount {
-    return from_candid_record_n17(_uploadFile, _downloadFile, value);
+function from_candid_TradingAccount_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _TradingAccount): TradingAccount {
+    return from_candid_record_n11(_uploadFile, _downloadFile, value);
 }
 function from_candid_TransactionStatus_n38(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _TransactionStatus): TransactionStatus {
     return from_candid_variant_n39(_uploadFile, _downloadFile, value);
@@ -1754,11 +1932,12 @@ function from_candid_opt_n7(_uploadFile: (file: ExternalBlob) => Promise<Uint8Ar
 function from_candid_opt_n70(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_LeaderboardEntry]): LeaderboardEntry | null {
     return value.length === 0 ? null : from_candid_LeaderboardEntry_n62(_uploadFile, _downloadFile, value[0]);
 }
-function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_record_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     balance: number;
     accountId: bigint;
     owner: Principal;
     freeMargin: number;
+    accountCode: string;
     accountType: _AccountType;
     currency: string;
     margin: number;
@@ -1768,6 +1947,7 @@ function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promise<Uin
     accountId: bigint;
     owner: Principal;
     freeMargin: number;
+    accountCode: string;
     accountType: AccountType;
     currency: string;
     margin: number;
@@ -1778,7 +1958,8 @@ function from_candid_record_n17(_uploadFile: (file: ExternalBlob) => Promise<Uin
         accountId: value.accountId,
         owner: value.owner,
         freeMargin: value.freeMargin,
-        accountType: from_candid_AccountType_n18(_uploadFile, _downloadFile, value.accountType),
+        accountCode: value.accountCode,
+        accountType: from_candid_AccountType_n12(_uploadFile, _downloadFile, value.accountType),
         currency: value.currency,
         margin: value.margin,
         equity: value.equity
@@ -1925,7 +2106,7 @@ function from_candid_record_n45(_uploadFile: (file: ExternalBlob) => Promise<Uin
         email: value.email,
         kycStatus: from_candid_KycStatus_n47(_uploadFile, _downloadFile, value.kycStatus),
         homeAddress: value.homeAddress,
-        accountType: from_candid_AccountType_n18(_uploadFile, _downloadFile, value.accountType),
+        accountType: from_candid_AccountType_n12(_uploadFile, _downloadFile, value.accountType),
         isBanned: value.isBanned,
         phone: value.phone,
         kycDocumentUrl: record_opt_to_undefined(from_candid_opt_n46(_uploadFile, _downloadFile, value.kycDocumentUrl))
@@ -2072,7 +2253,7 @@ function from_candid_tuple_n43(_uploadFile: (file: ExternalBlob) => Promise<Uint
         from_candid_UserProfile_n44(_uploadFile, _downloadFile, value[1])
     ];
 }
-function from_candid_variant_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+function from_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
     demo: null;
 } | {
     live: null;
@@ -2182,8 +2363,27 @@ function from_candid_variant_n72(_uploadFile: (file: ExternalBlob) => Promise<Ui
         failed: value.failed
     } : value;
 }
+function from_candid_variant_n74(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
+    ok: null;
+} | {
+    err: string;
+}): {
+    __kind__: "ok";
+    ok: null;
+} | {
+    __kind__: "err";
+    err: string;
+} {
+    return "ok" in value ? {
+        __kind__: "ok",
+        ok: value.ok
+    } : "err" in value ? {
+        __kind__: "err",
+        err: value.err
+    } : value;
+}
 function from_candid_vec_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_TradingAccount>): Array<TradingAccount> {
-    return value.map((x)=>from_candid_TradingAccount_n16(_uploadFile, _downloadFile, x));
+    return value.map((x)=>from_candid_TradingAccount_n10(_uploadFile, _downloadFile, x));
 }
 function from_candid_vec_n21(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_MarketInstrument>): Array<MarketInstrument> {
     return value.map((x)=>from_candid_MarketInstrument_n22(_uploadFile, _downloadFile, x));
@@ -2209,17 +2409,17 @@ function from_candid_vec_n61(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
 function from_candid_vec_n66(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<_ChatMessage>): Array<ChatMessage> {
     return value.map((x)=>from_candid_ChatMessage_n67(_uploadFile, _downloadFile, x));
 }
-function to_candid_AccountType_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AccountType): _AccountType {
+function to_candid_AccountType_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AccountType): _AccountType {
+    return to_candid_variant_n19(_uploadFile, _downloadFile, value);
+}
+function to_candid_InstrumentCategory_n14(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: InstrumentCategory): _InstrumentCategory {
     return to_candid_variant_n15(_uploadFile, _downloadFile, value);
 }
-function to_candid_InstrumentCategory_n10(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: InstrumentCategory): _InstrumentCategory {
-    return to_candid_variant_n11(_uploadFile, _downloadFile, value);
+function to_candid_KycStatus_n75(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: KycStatus): _KycStatus {
+    return to_candid_variant_n76(_uploadFile, _downloadFile, value);
 }
-function to_candid_KycStatus_n74(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: KycStatus): _KycStatus {
-    return to_candid_variant_n75(_uploadFile, _downloadFile, value);
-}
-function to_candid_OrderType_n12(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): _OrderType {
-    return to_candid_variant_n13(_uploadFile, _downloadFile, value);
+function to_candid_OrderType_n16(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): _OrderType {
+    return to_candid_variant_n17(_uploadFile, _downloadFile, value);
 }
 function to_candid_UserRole_n8(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: UserRole): _UserRole {
     return to_candid_variant_n9(_uploadFile, _downloadFile, value);
@@ -2230,7 +2430,7 @@ function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: Exte
 function to_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation | null): [] | [__CaffeineStorageRefillInformation] {
     return value === null ? candid_none() : candid_some(to_candid__CaffeineStorageRefillInformation_n2(_uploadFile, _downloadFile, value));
 }
-function to_candid_opt_n76(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Uint8Array | null): [] | [Uint8Array] {
+function to_candid_opt_n77(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Uint8Array | null): [] | [Uint8Array] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {
@@ -2242,7 +2442,7 @@ function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8A
         proposed_top_up_amount: value.proposed_top_up_amount ? candid_some(value.proposed_top_up_amount) : candid_none()
     };
 }
-function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: InstrumentCategory): {
+function to_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: InstrumentCategory): {
     forex: null;
 } | {
     stocks: null;
@@ -2265,7 +2465,7 @@ function to_candid_variant_n11(_uploadFile: (file: ExternalBlob) => Promise<Uint
         indices: null
     } : value;
 }
-function to_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): {
+function to_candid_variant_n17(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: OrderType): {
     buy: null;
 } | {
     sell: null;
@@ -2276,7 +2476,7 @@ function to_candid_variant_n13(_uploadFile: (file: ExternalBlob) => Promise<Uint
         sell: null
     } : value;
 }
-function to_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AccountType): {
+function to_candid_variant_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: AccountType): {
     demo: null;
 } | {
     live: null;
@@ -2287,7 +2487,7 @@ function to_candid_variant_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint
         live: null
     } : value;
 }
-function to_candid_variant_n75(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: KycStatus): {
+function to_candid_variant_n76(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: KycStatus): {
     notSubmitted: null;
 } | {
     pending: null;

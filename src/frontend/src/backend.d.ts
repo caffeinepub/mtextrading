@@ -18,15 +18,6 @@ export interface TransformationOutput {
     headers: Array<http_header>;
 }
 export type Time = bigint;
-export interface AppNotification {
-    id: bigint;
-    title: string;
-    body: string;
-    timestamp: Time;
-    isRead: boolean;
-    notifType: string;
-    owner: Principal;
-}
 export interface ChatConversation {
     userEmail: string;
     lastMessageTime: Time;
@@ -84,6 +75,15 @@ export interface TransformationInput {
     context: Uint8Array;
     response: http_request_result;
 }
+export interface AppNotification {
+    id: bigint;
+    title: string;
+    notifType: string;
+    owner: Principal;
+    body: string;
+    isRead: boolean;
+    timestamp: Time;
+}
 export interface ChatMessage {
     id: bigint;
     content: string;
@@ -115,10 +115,21 @@ export interface TradingAccount {
     accountId: bigint;
     owner: Principal;
     freeMargin: number;
+    accountCode: string;
     accountType: AccountType;
     currency: string;
     margin: number;
     equity: number;
+}
+export interface BotConfig {
+    depositFlowEnabled: boolean;
+    tradeFlowEnabled: boolean;
+    botName: string;
+    findProviderEnabled: boolean;
+    supportFlowEnabled: boolean;
+    greetingMessage: string;
+    voiceEnabled: boolean;
+    rules: string;
 }
 export interface CryptoWalletAddress {
     coin: string;
@@ -229,9 +240,12 @@ export interface backendInterface {
     approveWithdrawalRequest(requestId: bigint, notes: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     banUser(user: Principal): Promise<void>;
+    checkEmailRegistered(email: string): Promise<boolean>;
     closeOrder(orderId: bigint, closePrice: number): Promise<void>;
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
+    createDemoAccount(): Promise<TradingAccount>;
     createInstrument(name: string, symbol: string, category: InstrumentCategory, bidPrice: number, askPrice: number): Promise<bigint>;
+    createLiveAccountPlaceholder(currency: string): Promise<TradingAccount>;
     createOrder(accountId: bigint, instrumentId: bigint, orderType: OrderType, lotSize: number, openPrice: number, stopLoss: number, takeProfit: number): Promise<bigint>;
     createTradingAccount(accountType: AccountType, currency: string): Promise<TradingAccount>;
     deleteUser(user: Principal): Promise<void>;
@@ -243,10 +257,12 @@ export interface backendInterface {
     getAllTransactions(): Promise<Array<Transaction>>;
     getAllUsers(): Promise<Array<[Principal, UserProfile]>>;
     getAllWithdrawalRequests(): Promise<Array<WithdrawalRequest>>;
+    getBotConfig(): Promise<BotConfig>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>>;
     getCryptoWalletAddresses(): Promise<Array<CryptoWalletAddress>>;
+    getEmailRegistrations(): Promise<Array<string>>;
     getEnabledInstruments(): Promise<Array<MarketInstrument>>;
     getFinancialSummary(): Promise<{
         revenue: number;
@@ -259,9 +275,9 @@ export interface backendInterface {
     getInstrumentBySymbol(symbol: string): Promise<MarketInstrument | null>;
     getOwnAccounts(): Promise<Array<TradingAccount>>;
     getOwnChatMessages(): Promise<Array<ChatMessage>>;
-    getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnCryptoDepositRequests(): Promise<Array<CryptoDepositRequest>>;
     getOwnLeaderboardEntry(): Promise<LeaderboardEntry | null>;
+    getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnOrders(): Promise<Array<TradeOrder>>;
     getOwnTransactions(): Promise<Array<Transaction>>;
     getPlatformSettings(): Promise<PlatformSettings>;
@@ -273,17 +289,26 @@ export interface backendInterface {
     getUserOrders(user: Principal): Promise<Array<TradeOrder>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
+    isEmailVerified(email: string): Promise<boolean>;
     isStaffAdmin(email: string): Promise<boolean>;
     isStripeConfigured(): Promise<boolean>;
     markConversationRead(userId: Principal): Promise<void>;
     markNotificationsRead(): Promise<void>;
     registerUser(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string, accountType: AccountType): Promise<void>;
+    registerWithPassword(email: string, passwordHash: string): Promise<void>;
     rejectCryptoDeposit(depositId: bigint, notes: string): Promise<void>;
     rejectWithdrawalRequest(requestId: bigint, notes: string): Promise<void>;
     removeCryptoWalletAddress(coin: string, network: string): Promise<void>;
     removeStaffAdmin(email: string): Promise<void>;
     requestOtp(email: string): Promise<void>;
-    requestStaffOtp(email: string): Promise<void>;
+    requestStaffOtp(email: string): Promise<{
+        __kind__: "ok";
+        ok: null;
+    } | {
+        __kind__: "err";
+        err: string;
+    }>;
+    resetPassword(token: string, newPasswordHash: string): Promise<void>;
     resetUserDemoBalance(user: Principal, accountId: bigint): Promise<void>;
     reviewKycDocument(user: Principal, status: KycStatus, notes: string): Promise<void>;
     saveCallerUserProfile(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string, accountType: AccountType): Promise<void>;
@@ -291,6 +316,8 @@ export interface backendInterface {
     sendAnnouncementToAll(subject: string, body: string): Promise<void>;
     sendAnnouncementToUser(toEmail: string, subject: string, body: string): Promise<void>;
     sendChatMessage(content: string, imageData: Uint8Array | null, audioData: Uint8Array | null): Promise<bigint>;
+    sendPasswordResetEmail(email: string): Promise<void>;
+    setBotConfig(config: BotConfig): Promise<void>;
     setCryptoWalletAddress(coin: string, network: string, address: string): Promise<void>;
     setPlatformSettings(settings: PlatformSettings): Promise<void>;
     setStripeConfiguration(config: StripeConfiguration): Promise<void>;
@@ -305,6 +332,9 @@ export interface backendInterface {
     updateInstrumentPrices(instrumentId: string, bidPrice: number, askPrice: number): Promise<void>;
     updateUserProfile(name: string, email: string, phone: string, dateOfBirth: string, country: string, homeAddress: string): Promise<void>;
     upgradeUserAccountType(user: Principal, accountType: AccountType): Promise<void>;
+    verifyEmailToken(token: string): Promise<string>;
+    verifyLoginPassword(email: string, passwordHash: string): Promise<boolean>;
     verifyOtp(email: string, code: string): Promise<boolean>;
+    verifyRegistrationOtp(email: string, code: string): Promise<boolean>;
     verifyStaffOtp(email: string, code: string): Promise<boolean>;
 }

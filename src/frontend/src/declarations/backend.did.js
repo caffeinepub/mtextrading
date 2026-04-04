@@ -31,14 +31,6 @@ export const ShoppingItem = IDL.Record({
   'priceInCents' : IDL.Nat,
   'productDescription' : IDL.Text,
 });
-export const InstrumentCategory = IDL.Variant({
-  'forex' : IDL.Null,
-  'stocks' : IDL.Null,
-  'commodities' : IDL.Null,
-  'crypto' : IDL.Null,
-  'indices' : IDL.Null,
-});
-export const OrderType = IDL.Variant({ 'buy' : IDL.Null, 'sell' : IDL.Null });
 export const AccountType = IDL.Variant({
   'demo' : IDL.Null,
   'live' : IDL.Null,
@@ -48,11 +40,20 @@ export const TradingAccount = IDL.Record({
   'accountId' : IDL.Nat,
   'owner' : IDL.Principal,
   'freeMargin' : IDL.Float64,
+  'accountCode' : IDL.Text,
   'accountType' : AccountType,
   'currency' : IDL.Text,
   'margin' : IDL.Float64,
   'equity' : IDL.Float64,
 });
+export const InstrumentCategory = IDL.Variant({
+  'forex' : IDL.Null,
+  'stocks' : IDL.Null,
+  'commodities' : IDL.Null,
+  'crypto' : IDL.Null,
+  'indices' : IDL.Null,
+});
+export const OrderType = IDL.Variant({ 'buy' : IDL.Null, 'sell' : IDL.Null });
 export const Time = IDL.Int;
 export const ChatConversation = IDL.Record({
   'userEmail' : IDL.Text,
@@ -145,6 +146,16 @@ export const WithdrawalRequest = IDL.Record({
   'timestamp' : Time,
   'amount' : IDL.Float64,
 });
+export const BotConfig = IDL.Record({
+  'depositFlowEnabled' : IDL.Bool,
+  'tradeFlowEnabled' : IDL.Bool,
+  'botName' : IDL.Text,
+  'findProviderEnabled' : IDL.Bool,
+  'supportFlowEnabled' : IDL.Bool,
+  'greetingMessage' : IDL.Text,
+  'voiceEnabled' : IDL.Bool,
+  'rules' : IDL.Text,
+});
 export const CryptoDepositStatus = IDL.Variant({
   'pending' : IDL.Null,
   'approved' : IDL.Null,
@@ -172,15 +183,6 @@ export const LeaderboardEntry = IDL.Record({
   'name' : IDL.Text,
   'profit' : IDL.Float64,
 });
-export const AppNotification = IDL.Record({
-  'id' : IDL.Nat,
-  'title' : IDL.Text,
-  'body' : IDL.Text,
-  'timestamp' : Time,
-  'isRead' : IDL.Bool,
-  'notifType' : IDL.Text,
-  'owner' : IDL.Principal,
-});
 export const ChatMessage = IDL.Record({
   'id' : IDL.Nat,
   'content' : IDL.Text,
@@ -190,6 +192,15 @@ export const ChatMessage = IDL.Record({
   'timestamp' : Time,
   'isFromAdmin' : IDL.Bool,
   'senderEmail' : IDL.Text,
+});
+export const AppNotification = IDL.Record({
+  'id' : IDL.Nat,
+  'title' : IDL.Text,
+  'notifType' : IDL.Text,
+  'owner' : IDL.Principal,
+  'body' : IDL.Text,
+  'isRead' : IDL.Bool,
+  'timestamp' : Time,
 });
 export const PlatformSettings = IDL.Record({
   'cryptoHours' : IDL.Text,
@@ -266,17 +277,20 @@ export const idlService = IDL.Service({
   'approveWithdrawalRequest' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'banUser' : IDL.Func([IDL.Principal], [], []),
+  'checkEmailRegistered' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'closeOrder' : IDL.Func([IDL.Nat, IDL.Float64], [], []),
   'createCheckoutSession' : IDL.Func(
       [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
       [IDL.Text],
       [],
     ),
+  'createDemoAccount' : IDL.Func([], [TradingAccount], []),
   'createInstrument' : IDL.Func(
       [IDL.Text, IDL.Text, InstrumentCategory, IDL.Float64, IDL.Float64],
       [IDL.Nat],
       [],
     ),
+  'createLiveAccountPlaceholder' : IDL.Func([IDL.Text], [TradingAccount], []),
   'createOrder' : IDL.Func(
       [
         IDL.Nat,
@@ -316,6 +330,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(WithdrawalRequest)],
       ['query'],
     ),
+  'getBotConfig' : IDL.Func([], [BotConfig], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCryptoDepositRequests' : IDL.Func(
@@ -328,6 +343,7 @@ export const idlService = IDL.Service({
       [IDL.Vec(CryptoWalletAddress)],
       ['query'],
     ),
+  'getEmailRegistrations' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
   'getEnabledInstruments' : IDL.Func(
       [],
       [IDL.Vec(MarketInstrument)],
@@ -358,7 +374,6 @@ export const idlService = IDL.Service({
     ),
   'getOwnAccounts' : IDL.Func([], [IDL.Vec(TradingAccount)], ['query']),
   'getOwnChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
-  'getOwnNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
   'getOwnCryptoDepositRequests' : IDL.Func(
       [],
       [IDL.Vec(CryptoDepositRequest)],
@@ -369,6 +384,7 @@ export const idlService = IDL.Service({
       [IDL.Opt(LeaderboardEntry)],
       ['query'],
     ),
+  'getOwnNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
   'getOwnOrders' : IDL.Func([], [IDL.Vec(TradeOrder)], ['query']),
   'getOwnTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
   'getPlatformSettings' : IDL.Func([], [PlatformSettings], ['query']),
@@ -396,6 +412,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isEmailVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isStaffAdmin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
   'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
   'markConversationRead' : IDL.Func([IDL.Principal], [], []),
@@ -405,12 +422,18 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
+  'registerWithPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'rejectCryptoDeposit' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'rejectWithdrawalRequest' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'removeCryptoWalletAddress' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'removeStaffAdmin' : IDL.Func([IDL.Text], [], []),
   'requestOtp' : IDL.Func([IDL.Text], [], []),
-  'requestStaffOtp' : IDL.Func([IDL.Text], [], []),
+  'requestStaffOtp' : IDL.Func(
+      [IDL.Text],
+      [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+      [],
+    ),
+  'resetPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'resetUserDemoBalance' : IDL.Func([IDL.Principal, IDL.Nat], [], []),
   'reviewKycDocument' : IDL.Func([IDL.Principal, KycStatus, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func(
@@ -435,6 +458,8 @@ export const idlService = IDL.Service({
       [IDL.Nat],
       [],
     ),
+  'sendPasswordResetEmail' : IDL.Func([IDL.Text], [], []),
+  'setBotConfig' : IDL.Func([BotConfig], [], []),
   'setCryptoWalletAddress' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'setPlatformSettings' : IDL.Func([PlatformSettings], [], []),
   'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
@@ -469,6 +494,8 @@ export const idlService = IDL.Service({
       [],
     ),
   'upgradeUserAccountType' : IDL.Func([IDL.Principal, AccountType], [], []),
+  'verifyEmailToken' : IDL.Func([IDL.Text], [IDL.Text], []),
+  'verifyLoginPassword' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
   'verifyOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
   'verifyRegistrationOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
   'verifyStaffOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
@@ -500,6 +527,18 @@ export const idlFactory = ({ IDL }) => {
     'priceInCents' : IDL.Nat,
     'productDescription' : IDL.Text,
   });
+  const AccountType = IDL.Variant({ 'demo' : IDL.Null, 'live' : IDL.Null });
+  const TradingAccount = IDL.Record({
+    'balance' : IDL.Float64,
+    'accountId' : IDL.Nat,
+    'owner' : IDL.Principal,
+    'freeMargin' : IDL.Float64,
+    'accountCode' : IDL.Text,
+    'accountType' : AccountType,
+    'currency' : IDL.Text,
+    'margin' : IDL.Float64,
+    'equity' : IDL.Float64,
+  });
   const InstrumentCategory = IDL.Variant({
     'forex' : IDL.Null,
     'stocks' : IDL.Null,
@@ -508,17 +547,6 @@ export const idlFactory = ({ IDL }) => {
     'indices' : IDL.Null,
   });
   const OrderType = IDL.Variant({ 'buy' : IDL.Null, 'sell' : IDL.Null });
-  const AccountType = IDL.Variant({ 'demo' : IDL.Null, 'live' : IDL.Null });
-  const TradingAccount = IDL.Record({
-    'balance' : IDL.Float64,
-    'accountId' : IDL.Nat,
-    'owner' : IDL.Principal,
-    'freeMargin' : IDL.Float64,
-    'accountType' : AccountType,
-    'currency' : IDL.Text,
-    'margin' : IDL.Float64,
-    'equity' : IDL.Float64,
-  });
   const Time = IDL.Int;
   const ChatConversation = IDL.Record({
     'userEmail' : IDL.Text,
@@ -611,6 +639,16 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : Time,
     'amount' : IDL.Float64,
   });
+  const BotConfig = IDL.Record({
+    'depositFlowEnabled' : IDL.Bool,
+    'tradeFlowEnabled' : IDL.Bool,
+    'botName' : IDL.Text,
+    'findProviderEnabled' : IDL.Bool,
+    'supportFlowEnabled' : IDL.Bool,
+    'greetingMessage' : IDL.Text,
+    'voiceEnabled' : IDL.Bool,
+    'rules' : IDL.Text,
+  });
   const CryptoDepositStatus = IDL.Variant({
     'pending' : IDL.Null,
     'approved' : IDL.Null,
@@ -638,15 +676,6 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'profit' : IDL.Float64,
   });
-  const AppNotification = IDL.Record({
-    'id' : IDL.Nat,
-    'title' : IDL.Text,
-    'body' : IDL.Text,
-    'timestamp' : Time,
-    'isRead' : IDL.Bool,
-    'notifType' : IDL.Text,
-    'owner' : IDL.Principal,
-  });
   const ChatMessage = IDL.Record({
     'id' : IDL.Nat,
     'content' : IDL.Text,
@@ -656,6 +685,15 @@ export const idlFactory = ({ IDL }) => {
     'timestamp' : Time,
     'isFromAdmin' : IDL.Bool,
     'senderEmail' : IDL.Text,
+  });
+  const AppNotification = IDL.Record({
+    'id' : IDL.Nat,
+    'title' : IDL.Text,
+    'notifType' : IDL.Text,
+    'owner' : IDL.Principal,
+    'body' : IDL.Text,
+    'isRead' : IDL.Bool,
+    'timestamp' : Time,
   });
   const PlatformSettings = IDL.Record({
     'cryptoHours' : IDL.Text,
@@ -729,17 +767,20 @@ export const idlFactory = ({ IDL }) => {
     'approveWithdrawalRequest' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'banUser' : IDL.Func([IDL.Principal], [], []),
+    'checkEmailRegistered' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'closeOrder' : IDL.Func([IDL.Nat, IDL.Float64], [], []),
     'createCheckoutSession' : IDL.Func(
         [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
         [IDL.Text],
         [],
       ),
+    'createDemoAccount' : IDL.Func([], [TradingAccount], []),
     'createInstrument' : IDL.Func(
         [IDL.Text, IDL.Text, InstrumentCategory, IDL.Float64, IDL.Float64],
         [IDL.Nat],
         [],
       ),
+    'createLiveAccountPlaceholder' : IDL.Func([IDL.Text], [TradingAccount], []),
     'createOrder' : IDL.Func(
         [
           IDL.Nat,
@@ -779,6 +820,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(WithdrawalRequest)],
         ['query'],
       ),
+    'getBotConfig' : IDL.Func([], [BotConfig], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCryptoDepositRequests' : IDL.Func(
@@ -791,6 +833,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(CryptoWalletAddress)],
         ['query'],
       ),
+    'getEmailRegistrations' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
     'getEnabledInstruments' : IDL.Func(
         [],
         [IDL.Vec(MarketInstrument)],
@@ -821,7 +864,6 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getOwnAccounts' : IDL.Func([], [IDL.Vec(TradingAccount)], ['query']),
     'getOwnChatMessages' : IDL.Func([], [IDL.Vec(ChatMessage)], ['query']),
-    'getOwnNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
     'getOwnCryptoDepositRequests' : IDL.Func(
         [],
         [IDL.Vec(CryptoDepositRequest)],
@@ -832,6 +874,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(LeaderboardEntry)],
         ['query'],
       ),
+    'getOwnNotifications' : IDL.Func([], [IDL.Vec(AppNotification)], ['query']),
     'getOwnOrders' : IDL.Func([], [IDL.Vec(TradeOrder)], ['query']),
     'getOwnTransactions' : IDL.Func([], [IDL.Vec(Transaction)], ['query']),
     'getPlatformSettings' : IDL.Func([], [PlatformSettings], ['query']),
@@ -863,6 +906,7 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isEmailVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isStaffAdmin' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
     'markConversationRead' : IDL.Func([IDL.Principal], [], []),
@@ -880,12 +924,18 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'registerWithPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'rejectCryptoDeposit' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'rejectWithdrawalRequest' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'removeCryptoWalletAddress' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'removeStaffAdmin' : IDL.Func([IDL.Text], [], []),
     'requestOtp' : IDL.Func([IDL.Text], [], []),
-    'requestStaffOtp' : IDL.Func([IDL.Text], [], []),
+    'requestStaffOtp' : IDL.Func(
+        [IDL.Text],
+        [IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text })],
+        [],
+      ),
+    'resetPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'resetUserDemoBalance' : IDL.Func([IDL.Principal, IDL.Nat], [], []),
     'reviewKycDocument' : IDL.Func(
         [IDL.Principal, KycStatus, IDL.Text],
@@ -922,6 +972,8 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Nat],
         [],
       ),
+    'sendPasswordResetEmail' : IDL.Func([IDL.Text], [], []),
+    'setBotConfig' : IDL.Func([BotConfig], [], []),
     'setCryptoWalletAddress' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'setPlatformSettings' : IDL.Func([PlatformSettings], [], []),
     'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
@@ -956,16 +1008,15 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'upgradeUserAccountType' : IDL.Func([IDL.Principal, AccountType], [], []),
+    'verifyEmailToken' : IDL.Func([IDL.Text], [IDL.Text], []),
+    'verifyLoginPassword' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'verifyOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
     'verifyRegistrationOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
     'verifyStaffOtp' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], []),
-    'checkEmailRegistered' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'isEmailVerified' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'registerWithPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
-    'verifyEmailToken' : IDL.Func([IDL.Text], [IDL.Text], []),
-    'verifyLoginPassword' : IDL.Func([IDL.Text, IDL.Text], [IDL.Bool], ['query']),
-    'sendPasswordResetEmail' : IDL.Func([IDL.Text], [], []),
-    'resetPassword' : IDL.Func([IDL.Text, IDL.Text], [], []),
   });
 };
 

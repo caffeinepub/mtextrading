@@ -310,13 +310,6 @@ export default function RegisterPage({ onNavigate }: Props) {
         actorRef.current ?? (await getActor(email, passwordHashRef.current));
       actorRef.current = actor;
 
-      // Create demo trading account if none exists
-      try {
-        await actor.createTradingAccount(AccountType.demo, "USD");
-      } catch {
-        /* already exists */
-      }
-
       await actor.saveCallerUserProfile(
         fullName.trim(),
         email,
@@ -326,6 +319,13 @@ export default function RegisterPage({ onNavigate }: Props) {
         homeAddress.trim(),
         AccountType.demo,
       );
+
+      // Auto-create demo account (backend handles this, but call to ensure it's created)
+      try {
+        await actor.createDemoAccount();
+      } catch {
+        /* demo account may already exist */
+      }
 
       // Clear pending profile flag
       localStorage.removeItem("mtex_pending_profile");
