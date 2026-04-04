@@ -320,13 +320,6 @@ export default function RegisterPage({ onNavigate }: Props) {
         AccountType.demo,
       );
 
-      // Auto-create demo account (backend handles this, but call to ensure it's created)
-      try {
-        await actor.createDemoAccount();
-      } catch {
-        /* demo account may already exist */
-      }
-
       // Clear pending profile flag
       localStorage.removeItem("mtex_pending_profile");
 
@@ -340,6 +333,7 @@ export default function RegisterPage({ onNavigate }: Props) {
         .catch(() => {});
 
       toast.success("Profile saved! Welcome to Mtextrading");
+      localStorage.setItem("mtex_logged_in", "true");
       onNavigate("dashboard");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

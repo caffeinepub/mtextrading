@@ -85,8 +85,17 @@ function StaffAdminSection() {
   );
 }
 
+const getInitialPage = (): AppPage => {
+  try {
+    const email = localStorage.getItem("mtex_current_email");
+    const loggedIn = localStorage.getItem("mtex_logged_in");
+    if (email && loggedIn === "true") return "dashboard";
+  } catch {}
+  return "landing";
+};
+
 export default function App() {
-  const [page, setPage] = useState<AppPage>("landing");
+  const [page, setPage] = useState<AppPage>(getInitialPage);
   const [adminRouteType, setAdminRouteType] = useState<
     "none" | "superadmin" | "staff"
   >("none");

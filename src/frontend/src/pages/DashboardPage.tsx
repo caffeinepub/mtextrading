@@ -1553,8 +1553,12 @@ export default function DashboardPage({ onNavigate }: Props) {
           );
           instrumentId = BigInt(newId);
         }
-      } catch {
-        instrumentId = BigInt(0);
+      } catch (instErr: unknown) {
+        const instMsg =
+          instErr instanceof Error ? instErr.message : String(instErr);
+        toast.error(`Failed to prepare instrument: ${instMsg}`);
+        setIsPlacingOrder(false);
+        return;
       }
       await actor.createOrder(
         activeAccount.accountId,
@@ -7645,7 +7649,15 @@ export default function DashboardPage({ onNavigate }: Props) {
                 <button
                   type="button"
                   data-ocid="dashboard.sign_out.button"
-                  onClick={() => onNavigate("landing")}
+                  onClick={() => {
+                    localStorage.removeItem("mtex_logged_in");
+                    localStorage.removeItem("mtex_current_email");
+                    for (const k of Object.keys(localStorage)) {
+                      if (k.startsWith("mtex_identity_seed_"))
+                        localStorage.removeItem(k);
+                    }
+                    onNavigate("landing");
+                  }}
                   className="w-full text-center text-sm font-semibold mt-6 py-3"
                   style={{ color: "#1565c0" }}
                 >

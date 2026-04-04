@@ -10,17 +10,13 @@ const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
   const { identity: iiIdentity } = useInternetIdentity();
   const { identity: emailIdentity } = useEmailAuth();
-
-  // Prefer email identity (persists across refresh) over Internet Identity
-  const identity = emailIdentity ?? iiIdentity;
-
+  // Prefer email identity over Internet Identity
+  const identity = emailIdentity || iiIdentity;
   const queryClient = useQueryClient();
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
     queryFn: async () => {
-      const isAuthenticated = !!identity;
-
-      if (!isAuthenticated) {
+      if (!identity) {
         // Return anonymous actor if not authenticated
         return await createActorWithConfig();
       }
