@@ -3,20 +3,18 @@ import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
 import { getSecretParameter } from "../utils/urlParams";
-import { useEmailAuth } from "./useEmailAuth";
 import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
-  const { identity: iiIdentity } = useInternetIdentity();
-  const { identity: emailIdentity } = useEmailAuth();
-  // Prefer email identity over Internet Identity
-  const identity = emailIdentity || iiIdentity;
+  const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
   const actorQuery = useQuery<backendInterface>({
     queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString()],
     queryFn: async () => {
-      if (!identity) {
+      const isAuthenticated = !!identity;
+
+      if (!isAuthenticated) {
         // Return anonymous actor if not authenticated
         return await createActorWithConfig();
       }

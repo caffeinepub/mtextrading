@@ -289,6 +289,7 @@ export interface _SERVICE {
   'getFullLeaderboard' : ActorMethod<[], Array<LeaderboardEntry>>,
   'getInstrumentByIdQuery' : ActorMethod<[bigint], [] | [MarketInstrument]>,
   'getInstrumentBySymbol' : ActorMethod<[string], [] | [MarketInstrument]>,
+  'getOrCreateInstrument' : ActorMethod<[string, string, InstrumentCategory, number, number], bigint>,
   'getOwnAccounts' : ActorMethod<[], Array<TradingAccount>>,
   'getOwnChatMessages' : ActorMethod<[], Array<ChatMessage>>,
   'getOwnCryptoDepositRequests' : ActorMethod<[], Array<CryptoDepositRequest>>,

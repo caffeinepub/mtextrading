@@ -345,6 +345,7 @@ export interface backendInterface {
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
     createDemoAccount(): Promise<TradingAccount>;
     createInstrument(name: string, symbol: string, category: InstrumentCategory, bidPrice: number, askPrice: number): Promise<bigint>;
+    getOrCreateInstrument(name: string, symbol: string, category: InstrumentCategory, bidPrice: number, askPrice: number): Promise<bigint>;
     createLiveAccountPlaceholder(currency: string): Promise<TradingAccount>;
     createOrder(accountId: bigint, instrumentId: bigint, orderType: OrderType, lotSize: number, openPrice: number, stopLoss: number, takeProfit: number): Promise<bigint>;
     createTradingAccount(accountType: AccountType, currency: string): Promise<TradingAccount>;
@@ -690,6 +691,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.createInstrument(arg0, arg1, to_candid_InstrumentCategory_n14(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
+            return result;
+        }
+    }
+    async getOrCreateInstrument(arg0: string, arg1: string, arg2: InstrumentCategory, arg3: number, arg4: number): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOrCreateInstrument(arg0, arg1, to_candid_InstrumentCategory_n14(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOrCreateInstrument(arg0, arg1, to_candid_InstrumentCategory_n14(this._uploadFile, this._downloadFile, arg2), arg3, arg4);
             return result;
         }
     }

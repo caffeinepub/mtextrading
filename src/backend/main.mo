@@ -1101,6 +1101,34 @@ actor {
     instrumentId;
   };
 
+  // Any authenticated user can call this to ensure an instrument exists before placing an order
+  public shared ({ caller }) func getOrCreateInstrument(name : Text, symbol : Text, category : InstrumentCategory, bidPrice : Float, askPrice : Float) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can call getOrCreateInstrument");
+    };
+    switch (instruments.get(symbol)) {
+      case (?existing) { existing.instrumentId };
+      case null {
+        let instrumentId = instruments.size();
+        let instrument : MarketInstrument = {
+          instrumentId;
+          name;
+          symbol;
+          category;
+          bidPrice;
+          askPrice;
+          spread = askPrice - bidPrice;
+          lastUpdated = Time.now();
+          enabled = true;
+          leverage = 100.0;
+        };
+        instruments.add(symbol, instrument);
+        instrumentId;
+      };
+    };
+  };
+
+
   public shared ({ caller }) func deleteUser(user : Principal) : async () {
     verifyAdminAccess(caller);
     userProfiles.remove(user);

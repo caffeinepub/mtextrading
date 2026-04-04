@@ -1529,30 +1529,23 @@ export default function DashboardPage({ onNavigate }: Props) {
       };
       let instrumentId: bigint;
       try {
-        const inst = await actor.getInstrumentBySymbol(
-          selectedInstrument.symbol,
+        const bidPrice = Number.parseFloat(
+          selectedInstrument.sellPrice.replace(/,/g, ""),
         );
-        if (inst) {
-          instrumentId = inst.instrumentId;
-        } else {
-          // Auto-create the instrument in the backend
-          const bidPrice = Number.parseFloat(
-            selectedInstrument.sellPrice.replace(/,/g, ""),
-          );
-          const askPrice = Number.parseFloat(
-            selectedInstrument.buyPrice.replace(/,/g, ""),
-          );
-          const cat = getInstrumentCategory(selectedInstrument.symbol);
-          const catVariant = { [cat]: null } as any;
-          const newId = await actor.createInstrument(
-            selectedInstrument.name,
-            selectedInstrument.symbol,
-            catVariant,
-            bidPrice,
-            askPrice,
-          );
-          instrumentId = BigInt(newId);
-        }
+        const askPrice = Number.parseFloat(
+          selectedInstrument.buyPrice.replace(/,/g, ""),
+        );
+        const cat = getInstrumentCategory(selectedInstrument.symbol);
+        const catVariant = { [cat]: null } as any;
+        // getOrCreateInstrument is callable by any authenticated user
+        const newId = await actor.getOrCreateInstrument(
+          selectedInstrument.name,
+          selectedInstrument.symbol,
+          catVariant,
+          bidPrice,
+          askPrice,
+        );
+        instrumentId = BigInt(newId);
       } catch (instErr: unknown) {
         const instMsg =
           instErr instanceof Error ? instErr.message : String(instErr);
