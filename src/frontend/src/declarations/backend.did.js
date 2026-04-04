@@ -290,6 +290,11 @@ export const idlService = IDL.Service({
       [IDL.Nat],
       [],
     ),
+  'getOrCreateInstrument' : IDL.Func(
+      [IDL.Text, IDL.Text, InstrumentCategory, IDL.Float64, IDL.Float64],
+      [IDL.Nat],
+      [],
+    ),
   'createLiveAccountPlaceholder' : IDL.Func([IDL.Text], [TradingAccount], []),
   'createOrder' : IDL.Func(
       [
@@ -776,6 +781,11 @@ export const idlFactory = ({ IDL }) => {
       ),
     'createDemoAccount' : IDL.Func([], [TradingAccount], []),
     'createInstrument' : IDL.Func(
+        [IDL.Text, IDL.Text, InstrumentCategory, IDL.Float64, IDL.Float64],
+        [IDL.Nat],
+        [],
+      ),
+    'getOrCreateInstrument' : IDL.Func(
         [IDL.Text, IDL.Text, InstrumentCategory, IDL.Float64, IDL.Float64],
         [IDL.Nat],
         [],
