@@ -116,7 +116,7 @@ export default function LoginPage({ onNavigate }: Props) {
             );
           } catch {}
           toast.success(`Welcome back, ${profile.name || "Trader"}!`);
-          localStorage.setItem("mtex_logged_in", "true");
+          sessionStorage.setItem("mtex_active_session", "true");
           onNavigate("dashboard");
         });
         setShow2FAStep(true);
@@ -137,7 +137,7 @@ export default function LoginPage({ onNavigate }: Props) {
         );
       } catch {}
       toast.success(`Welcome back, ${profile.name || "Trader"}!`);
-      localStorage.setItem("mtex_logged_in", "true");
+      sessionStorage.setItem("mtex_active_session", "true");
       onNavigate("dashboard");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

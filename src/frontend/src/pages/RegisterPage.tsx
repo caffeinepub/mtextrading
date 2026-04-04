@@ -333,7 +333,7 @@ export default function RegisterPage({ onNavigate }: Props) {
         .catch(() => {});
 
       toast.success("Profile saved! Welcome to Mtextrading");
-      localStorage.setItem("mtex_logged_in", "true");
+      sessionStorage.setItem("mtex_active_session", "true");
       onNavigate("dashboard");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);

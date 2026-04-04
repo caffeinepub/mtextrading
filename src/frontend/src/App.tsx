@@ -88,16 +88,17 @@ function StaffAdminSection() {
 const getInitialPage = (): AppPage => {
   try {
     const email = localStorage.getItem("mtex_current_email");
-    const loggedIn = localStorage.getItem("mtex_logged_in");
-    // Also verify the identity seed exists — without it the actor will be
-    // anonymous and all user data calls will fail even though "logged in"
-    const seedKey = email ? `mtex_identity_seed_${email}` : null;
-    const hasSeed = seedKey ? !!localStorage.getItem(seedKey) : false;
-    if (email && loggedIn === "true" && hasSeed) return "dashboard";
-    // Stale flag — clear it so next visit starts clean
-    if (loggedIn === "true" && (!email || !hasSeed)) {
-      localStorage.removeItem("mtex_logged_in");
-    }
+    const hasSeed = email
+      ? !!localStorage.getItem(`mtex_identity_seed_${email}`)
+      : false;
+    // sessionStorage is cleared when the browser tab closes, so this only
+    // returns "dashboard" on a real page refresh within the same session,
+    // not on a fresh browser open.
+    const activeSession =
+      sessionStorage.getItem("mtex_active_session") === "true";
+    if (email && hasSeed && activeSession) return "dashboard";
+    // Clean up stale localStorage logged-in flag from old builds
+    localStorage.removeItem("mtex_logged_in");
   } catch {}
   return "landing";
 };

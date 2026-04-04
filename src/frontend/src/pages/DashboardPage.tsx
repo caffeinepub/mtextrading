@@ -7643,8 +7643,8 @@ export default function DashboardPage({ onNavigate }: Props) {
                   type="button"
                   data-ocid="dashboard.sign_out.button"
                   onClick={() => {
-                    localStorage.removeItem("mtex_logged_in");
                     localStorage.removeItem("mtex_current_email");
+                    sessionStorage.removeItem("mtex_active_session");
                     for (const k of Object.keys(localStorage)) {
                       if (k.startsWith("mtex_identity_seed_"))
                         localStorage.removeItem(k);
