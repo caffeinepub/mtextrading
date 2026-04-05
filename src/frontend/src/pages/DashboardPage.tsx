@@ -64,6 +64,7 @@ import FloatingChatButton from "../components/FloatingChatButton";
 import MTChart from "../components/MTChart";
 import PromoCarousel from "../components/PromoCarousel";
 import { useActor } from "../hooks/useActor";
+import { useEmailAuth } from "../hooks/useEmailAuth";
 import { useLivePrices } from "../hooks/useLivePrices";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -919,6 +920,7 @@ function LeaderboardHubView({
 
 export default function DashboardPage({ onNavigate }: Props) {
   const { actor } = useActor();
+  const { logout: emailLogout } = useEmailAuth();
 
   // ── Navigation
   const [activeTab, setActiveTab] = useState<BottomTab>("home");
@@ -7643,6 +7645,7 @@ export default function DashboardPage({ onNavigate }: Props) {
                   type="button"
                   data-ocid="dashboard.sign_out.button"
                   onClick={() => {
+                    emailLogout();
                     localStorage.removeItem("mtex_current_email");
                     sessionStorage.removeItem("mtex_active_session");
                     for (const k of Object.keys(localStorage)) {

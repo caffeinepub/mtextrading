@@ -10,7 +10,7 @@ import {
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { AppPage } from "../App";
-import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useEmailAuth } from "../hooks/useEmailAuth";
 import AIAssistantButton from "./AIAssistantButton";
 
 interface Props {
@@ -28,11 +28,12 @@ const NAV_ITEMS: { page: AppPage; label: string; icon: React.ElementType }[] = [
 ];
 
 export default function Layout({ children, currentPage, onNavigate }: Props) {
-  const { clear } = useInternetIdentity();
+  const { logout } = useEmailAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => {
-    clear();
+    logout();
+    sessionStorage.removeItem("mtex_active_session");
     onNavigate("landing");
   };
 
