@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
-import { getSecretParameter } from "../utils/urlParams";
 import { useEmailAuth } from "./useEmailAuth";
 
 const ACTOR_QUERY_KEY = "actor";
@@ -24,9 +23,8 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Grant #user role for all email-authenticated users
-      const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
+      // Grant #user role for all email-logged-in users
+      await actor._initializeAccessControlWithSecret("");
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
