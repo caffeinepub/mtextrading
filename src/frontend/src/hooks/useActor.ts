@@ -2,46 +2,49 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
+import { getSecretParameter } from "../utils/urlParams";
 import { useEmailAuth } from "./useEmailAuth";
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
-  const { identity: emailIdentity } = useEmailAuth();
+  const { identity } = useEmailAuth();
   const queryClient = useQueryClient();
-
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [
-      ACTOR_QUERY_KEY,
-      emailIdentity?.getPrincipal().toString() ?? "anon",
-    ],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
     queryFn: async () => {
-      // Email identity takes priority — covers all normal user flows.
-      // Internet Identity is only used by the Super Admin dashboard (/#/superadmin)
-      // which has its own actor setup and does not use this hook.
-      if (emailIdentity) {
-        const actor = await createActorWithConfig({
-          agentOptions: { identity: emailIdentity },
-        });
-        // Empty string grants the #user role via access control
-        await actor._initializeAccessControlWithSecret("");
-        return actor;
+      if (!identity) {
+        // Return anonymous actor if not authenticated
+        return await createActorWithConfig();
       }
 
-      // No email identity — return anonymous actor
-      return await createActorWithConfig();
+      const actorOptions = {
+        agentOptions: {
+          identity,
+        },
+      };
+
+      const actor = await createActorWithConfig(actorOptions);
+      // Grant #user role for all email-authenticated users
+      const adminToken = getSecretParameter("caffeineAdminToken") || "";
+      await actor._initializeAccessControlWithSecret(adminToken);
+      return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
     enabled: true,
   });
 
-  // Invalidate dependent queries when actor changes
+  // When the actor changes, invalidate dependent queries
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        },
       });
       queryClient.refetchQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        },
       });
     }
   }, [actorQuery.data, queryClient]);
