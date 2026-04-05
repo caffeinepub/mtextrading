@@ -67,9 +67,9 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
 );
 
 /**
- * This context allows the EmailAuthProvider to inject the email-derived
- * identity so that useInternetIdentity() (and therefore useActor()) picks
- * it up automatically without any changes to useActor.ts.
+ * Context that allows EmailAuthProvider to inject an email-derived identity
+ * so that useInternetIdentity() (and therefore useActor) picks it up
+ * automatically for normal users without touching useActor.ts.
  */
 export const EmailIdentityOverrideContext = createContext<Identity | null>(
   null,
@@ -115,14 +115,15 @@ function assertProviderPresent(
  * Hook to access the internet identity as well as loginStatus along with
  * login and clear functions.
  *
- * When an email identity override is set (via EmailIdentityOverrideContext),
- * it takes priority over the Internet Identity. This allows email-logged-in
- * users to use the same useActor() hook without any changes.
+ * If an email identity override is present (set by EmailAuthProvider),
+ * it takes priority over Internet Identity so normal email-logged-in users
+ * get the correct identity in useActor.
  */
 export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
-  // If an email identity is injected, override the II identity with it
+  // If an email identity is injected (normal user logged in with email+password),
+  // return it instead of the Internet Identity.
   const emailIdentityOverride = useContext(EmailIdentityOverrideContext);
   if (emailIdentityOverride) {
     return {
