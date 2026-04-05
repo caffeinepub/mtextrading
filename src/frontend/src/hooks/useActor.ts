@@ -26,7 +26,7 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Grant #user role for email-authenticated users
+      // Grant #user role for all email-authenticated users
       await actor._initializeAccessControlWithSecret("");
       return actor;
     },
