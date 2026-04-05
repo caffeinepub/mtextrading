@@ -820,8 +820,11 @@ export default function AdminPage({
       setOrders(o);
       setInstruments(i);
       setWalletAddresses(Array.isArray(wallets) ? wallets : []);
-    } catch {
-      // silently fail — same pattern as loadPart2Data and loadPart3Data
+    } catch (e) {
+      console.error("Admin loadData error:", e);
+      toast.error(
+        `Failed to load admin data: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   };
 

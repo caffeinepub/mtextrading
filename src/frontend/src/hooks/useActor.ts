@@ -4,30 +4,47 @@ import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
 import { getSecretParameter } from "../utils/urlParams";
 import { useEmailAuth } from "./useEmailAuth";
+import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
-  const { identity } = useEmailAuth();
+  const emailAuth = useEmailAuth();
+  const { identity: iiIdentity } = useInternetIdentity();
   const queryClient = useQueryClient();
+
+  // Use email identity for normal users; fall back to Internet Identity for super admin
+  const emailIdentity = emailAuth.identity;
+  const activeIdentity = emailIdentity ?? iiIdentity;
+  const identityKey = activeIdentity?.getPrincipal().toString() ?? "anonymous";
+
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
+    queryKey: [ACTOR_QUERY_KEY, identityKey],
     queryFn: async () => {
-      if (!identity) {
+      if (!activeIdentity) {
         // Return anonymous actor if not authenticated
         return await createActorWithConfig();
       }
 
       const actorOptions = {
         agentOptions: {
-          identity,
+          identity: activeIdentity,
         },
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Grant #user role for email-authenticated users
-      await actor._initializeAccessControlWithSecret("");
+
+      if (emailIdentity) {
+        // Normal user: grant #user role via empty secret
+        await actor._initializeAccessControlWithSecret("");
+      } else {
+        // Super admin / Internet Identity path: use caffeineAdminToken if present
+        const adminToken = getSecretParameter("caffeineAdminToken") || "";
+        await actor._initializeAccessControlWithSecret(adminToken);
+      }
+
       return actor;
     },
+    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
     enabled: true,
   });
