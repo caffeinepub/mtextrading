@@ -1,29 +1,26 @@
-# Mtextrading — Fix: Order Placement, Session Persistence, Duplicate Demo Account
+# Mtextrading
 
 ## Current State
-- Trade orders fail with "instrument not found" when the actor used to place the order is anonymous (no email identity loaded) or the catch block silently sets instrumentId to BigInt(0)
-- App.tsx always starts at page="landing" on refresh — no localStorage check to restore session to "dashboard"
-- useActor hook only uses useInternetIdentity (not email identity), so email-logged-in users get an anonymous actor on refresh
-- RegisterPage.tsx calls createDemoAccount() after saveCallerUserProfile — the backend saveCallerUserProfile already auto-creates a demo account, causing duplicates
+- `useActor` hook uses `useInternetIdentity` exclusively. Email-logged-in users get an anonymous actor, causing all `#user` permission checks to fail with "Unauthorized".
+- `closeOrder` backend requires `#user` permission — fails for email-auth users.
+- `BALANCE_HISTORY` is a hardcoded constant with fake transactions (10k deposit, 500 withdrawal, 5k deposit). It renders in two places: Positions > History tab and Hub > Account Statement.
+- Backend has `getOwnTransactions()` returning real `Transaction[]` with fields: transactionType, status, amount, timestamp, accountId, transactionId.
 
 ## Requested Changes (Diff)
+
 ### Add
-- Session restore in App.tsx: on mount, check localStorage for mtex_current_email and mtex_logged_in flag — if present, start at page="dashboard" instead of "landing"
-- useActor hook: check useEmailAuth identity first before useInternetIdentity, so email-logged-in users get a proper actor after refresh
+- Load real transactions from `actor.getOwnTransactions()` and display them in both history locations.
 
 ### Modify
-- RegisterPage.tsx: remove the explicit createDemoAccount() call after saveCallerUserProfile (backend already handles this)
-- DashboardPage.tsx: in handlePlaceOrder, if getInstrumentBySymbol/createInstrument throws, show a proper error toast instead of silently falling back to BigInt(0) which causes the "instrument not found" error
-- LoginPage.tsx: when login succeeds, set a "mtex_logged_in" flag in localStorage
-- DashboardPage.tsx: on logout, clear "mtex_logged_in" from localStorage
+- `useActor.ts`: check `useEmailAuth` identity first. If email identity is present, use it for the actor and call `_initializeAccessControlWithSecret("")`. Only fall back to Internet Identity if no email identity exists (Super Admin use case only).
+- `DashboardPage.tsx`: replace `BALANCE_HISTORY` constant usage with real transaction state loaded from backend. Show loading/empty states.
 
 ### Remove
-- The fallback `instrumentId = BigInt(0)` in the catch block of handlePlaceOrder
+- `BALANCE_HISTORY` hardcoded constant and its two render usages.
+- `useInternetIdentity` import from `useActor.ts` (keep Internet Identity only for Super Admin at `/#/superadmin`).
 
 ## Implementation Plan
-1. Modify useActor.ts to use emailAuth.identity when available (before InternetIdentity)
-2. Modify App.tsx to restore session page from localStorage on mount
-3. Modify RegisterPage.tsx to remove the duplicate createDemoAccount() call
-4. Modify DashboardPage.tsx to not fall back to BigInt(0) — throw a clear error instead
-5. Ensure LoginPage sets mtex_logged_in flag in localStorage on successful login
-6. Ensure logout clears mtex_logged_in from localStorage
+1. Update `useActor.ts` to import and use `useEmailAuth`, use email identity when available, call `_initializeAccessControlWithSecret("")` with empty string for user role.
+2. In `DashboardPage.tsx`, add a `transactions` state, fetch via `actor.getOwnTransactions()` when actor is ready, format and render real transactions in both the Positions > History and Hub > Statement sections.
+3. Delete `BALANCE_HISTORY` constant.
+4. Validate and deploy.

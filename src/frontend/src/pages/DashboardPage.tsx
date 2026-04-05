@@ -655,12 +655,6 @@ const SIGNALS: SignalData[] = [
   },
 ];
 
-const BALANCE_HISTORY = [
-  { type: "Deposit", amount: "+$10,000.00", balance: "$10,000.00" },
-  { type: "Withdrawal", amount: "-$500.00", balance: "$9,500.00" },
-  { type: "Deposit", amount: "+$5,000.00", balance: "$14,500.00" },
-];
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function initials(name: string): string {
   return name
@@ -1053,6 +1047,16 @@ export default function DashboardPage({ onNavigate }: Props) {
       requestId?: bigint;
     }[]
   >([]);
+  const [ownTransactions, setOwnTransactions] = useState<
+    Array<{
+      transactionType: { deposit: null } | { withdrawal: null };
+      status: { pending: null } | { completed: null } | { failed: null };
+      amount: number;
+      timestamp: bigint;
+      transactionId: bigint;
+      accountId: bigint;
+    }>
+  >([]);
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1351,13 +1355,19 @@ export default function DashboardPage({ onNavigate }: Props) {
     actor
       .getOwnTransactions()
       .then((txns) => {
-        const withdrawalTxns = txns
-          .filter(
-            (t: any) =>
-              String(t.transactionType) === "withdrawal" ||
-              String(t.transactionType) === "Withdrawal",
-          )
-          .sort((a: any, b: any) => Number(b.timestamp) - Number(a.timestamp));
+        // Store ALL transactions for history display
+        const sorted = [...txns].sort(
+          (a: any, b: any) => Number(b.timestamp) - Number(a.timestamp),
+        );
+        setOwnTransactions(sorted as any);
+
+        // Also extract withdrawal transactions for pending withdrawal display
+        const withdrawalTxns = sorted.filter(
+          (t: any) =>
+            "withdrawal" in (t.transactionType ?? {}) ||
+            String(t.transactionType) === "withdrawal" ||
+            String(t.transactionType) === "Withdrawal",
+        );
         if (withdrawalTxns.length > 0) {
           setPendingWithdrawals(
             withdrawalTxns.map((t: any) => ({
@@ -4670,29 +4680,57 @@ export default function DashboardPage({ onNavigate }: Props) {
               {fmt(activeAccount?.balance ?? 0)}
             </p>
           </div>
-          {BALANCE_HISTORY.map((tx, i) => (
-            <div
-              key={tx.type + tx.amount}
-              data-ocid={`dashboard.balance_history.item.${i + 1}`}
-              className="flex items-center justify-between py-3 border-b border-gray-100"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className="text-xs font-semibold px-3 py-1 rounded-full"
-                  style={{ background: "#e3f2fd", color: "#1565c0" }}
+          {ownTransactions.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">
+              No transactions yet
+            </p>
+          ) : (
+            ownTransactions.map((tx, i) => {
+              const isDeposit = "deposit" in tx.transactionType;
+              const isCompleted = "completed" in tx.status;
+              const isPending = "pending" in tx.status;
+              const sign = isDeposit ? "+" : "-";
+              const color = isDeposit ? "text-emerald-600" : "text-rose-600";
+              const label = isDeposit ? "Deposit" : "Withdrawal";
+              const statusLabel = isCompleted
+                ? "Completed"
+                : isPending
+                  ? "Pending"
+                  : "Failed";
+              const date = new Date(
+                Number(tx.timestamp) / 1_000_000,
+              ).toLocaleDateString();
+              return (
+                <div
+                  key={String(tx.transactionId)}
+                  data-ocid={`dashboard.balance_history.item.${i + 1}`}
+                  className="flex items-center justify-between py-3 border-b border-gray-100"
                 >
-                  {tx.type}
-                </span>
-                <p className="text-sm text-gray-700">{tx.amount}</p>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <p className="text-sm font-semibold text-gray-700">
-                  {tx.balance}
-                </p>
-                <ChevronRight size={14} className="text-gray-400" />
-              </div>
-            </div>
-          ))}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="text-xs font-semibold px-3 py-1 rounded-full"
+                      style={{ background: "#e3f2fd", color: "#1565c0" }}
+                    >
+                      {label}
+                    </span>
+                    <div>
+                      <p className={`text-sm font-bold ${color}`}>
+                        {sign}$
+                        {tx.amount.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {date} · {statusLabel}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-gray-400" />
+                </div>
+              );
+            })
+          )}
         </div>
       )}
     </div>
@@ -5823,41 +5861,63 @@ export default function DashboardPage({ onNavigate }: Props) {
             )}
           </div>
           <div className="space-y-2">
-            {BALANCE_HISTORY.map((tx, i) => (
-              <div
-                key={tx.type + tx.amount}
-                data-ocid={`hub.statement.item.${i + 1}`}
-                className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
+            {ownTransactions.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">
+                No transactions yet
+              </p>
+            ) : (
+              ownTransactions.map((tx, i) => {
+                const isDeposit = "deposit" in tx.transactionType;
+                const isCompleted = "completed" in tx.status;
+                const isPending = "pending" in tx.status;
+                const sign = isDeposit ? "+" : "-";
+                const color = isDeposit ? "text-emerald-600" : "text-rose-600";
+                const label = isDeposit ? "Deposit" : "Withdrawal";
+                const statusLabel = isCompleted
+                  ? "Completed"
+                  : isPending
+                    ? "Pending"
+                    : "Failed";
+                const date = new Date(
+                  Number(tx.timestamp) / 1_000_000,
+                ).toLocaleDateString();
+                return (
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center ${tx.type === "Deposit" ? "bg-emerald-50" : "bg-rose-50"}`}
+                    key={String(tx.transactionId)}
+                    data-ocid={`hub.statement.item.${i + 1}`}
+                    className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-4 py-3"
                   >
-                    <DollarSign
-                      size={16}
-                      className={
-                        tx.type === "Deposit"
-                          ? "text-emerald-600"
-                          : "text-rose-600"
-                      }
-                    />
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center ${isDeposit ? "bg-emerald-50" : "bg-rose-50"}`}
+                      >
+                        <DollarSign
+                          size={16}
+                          className={
+                            isDeposit ? "text-emerald-600" : "text-rose-600"
+                          }
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">
+                          {label}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {date} · {statusLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-bold ${color}`}>
+                      {sign}$
+                      {tx.amount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">
-                      {tx.type}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      Balance: {tx.balance}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`text-sm font-bold ${tx.amount.startsWith("+") ? "text-emerald-600" : "text-rose-600"}`}
-                >
-                  {tx.amount}
-                </span>
-              </div>
-            ))}
+                );
+              })
+            )}
           </div>
         </div>
       )}

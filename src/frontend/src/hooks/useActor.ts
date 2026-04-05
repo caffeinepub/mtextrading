@@ -6,48 +6,42 @@ import { useEmailAuth } from "./useEmailAuth";
 
 const ACTOR_QUERY_KEY = "actor";
 export function useActor() {
-  const { identity } = useEmailAuth();
+  const { identity: emailIdentity } = useEmailAuth();
   const queryClient = useQueryClient();
 
   const actorQuery = useQuery<backendInterface>({
     queryKey: [
       ACTOR_QUERY_KEY,
-      identity?.getPrincipal().toString() ?? "anonymous",
+      emailIdentity?.getPrincipal().toString() ?? "anon",
     ],
     queryFn: async () => {
-      if (!identity) {
-        // Return anonymous actor if not authenticated
-        return await createActorWithConfig();
+      // Email identity takes priority — covers all normal user flows.
+      // Internet Identity is only used by the Super Admin dashboard (/#/superadmin)
+      // which has its own actor setup and does not use this hook.
+      if (emailIdentity) {
+        const actor = await createActorWithConfig({
+          agentOptions: { identity: emailIdentity },
+        });
+        // Empty string grants the #user role via access control
+        await actor._initializeAccessControlWithSecret("");
+        return actor;
       }
 
-      const actorOptions = {
-        agentOptions: {
-          identity,
-        },
-      };
-
-      const actor = await createActorWithConfig(actorOptions);
-      // Grant #user role for email-authenticated users
-      await actor._initializeAccessControlWithSecret("");
-      return actor;
+      // No email identity — return anonymous actor
+      return await createActorWithConfig();
     },
-    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
     enabled: true,
   });
 
-  // When the actor changes, invalidate dependent queries
+  // Invalidate dependent queries when actor changes
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
       queryClient.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        },
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
       });
     }
   }, [actorQuery.data, queryClient]);
