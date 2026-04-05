@@ -66,16 +66,14 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
   undefined,
 );
 
-// Email identity override context — EmailAuthProvider sets this so that
-// useInternetIdentity() returns the email-derived identity for normal users.
-// useActor.ts never needs to change; it just reads from useInternetIdentity().
-const EmailIdentityOverrideContext = createContext<Identity | null>(null);
-
-export function useEmailIdentityOverride() {
-  return useContext(EmailIdentityOverrideContext);
-}
-
-export { EmailIdentityOverrideContext };
+/**
+ * When the user logs in via email+password, EmailAuthProvider injects
+ * the derived identity here so that useInternetIdentity (and useActor)
+ * automatically pick it up -- no changes to useActor required.
+ */
+export const EmailIdentityOverrideContext = createContext<Identity | null>(
+  null,
+);
 
 /**
  * Create the auth client with default options or options provided by the user.
@@ -120,16 +118,12 @@ function assertProviderPresent(
 export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
-  // If an email identity has been injected by EmailAuthProvider, return it
-  // overlaid on the Internet Identity context. useActor.ts picks up the
-  // email identity without any changes to that file.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // If an email identity override is present (email+password login),
+  // return it in place of the Internet Identity so useActor uses the
+  // correct principal for all backend calls.
   const emailOverride = useContext(EmailIdentityOverrideContext);
   if (emailOverride) {
-    return {
-      ...context,
-      identity: emailOverride,
-    };
+    return { ...context, identity: emailOverride };
   }
   return context;
 };
