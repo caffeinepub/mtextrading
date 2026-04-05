@@ -8,6 +8,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { EmailIdentityOverrideContext } from "./useInternetIdentity";
 
 const CURRENT_EMAIL_KEY = "mtex_current_email";
 
@@ -165,15 +166,22 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
     setState({ identity: null, email: null });
   };
 
-  return createElement(EmailAuthReactContext.Provider, {
-    value: {
-      identity: state.identity,
-      currentEmail: state.email,
-      setIdentityFromCredentials,
-      registerWithEmail,
-      loginWithEmail,
-      logout,
-    },
-    children,
-  });
+  return createElement(
+    EmailIdentityOverrideContext.Provider,
+    { value: state.identity },
+    createElement(
+      EmailAuthReactContext.Provider,
+      {
+        value: {
+          identity: state.identity,
+          currentEmail: state.email,
+          setIdentityFromCredentials,
+          registerWithEmail,
+          loginWithEmail,
+          logout,
+        },
+      },
+      children,
+    ),
+  );
 }
