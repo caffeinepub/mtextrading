@@ -70,7 +70,9 @@ import {
 } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 
+import type { backendInterface } from "../backend";
 import { Textarea } from "../components/ui/textarea";
+import { createActorWithConfig } from "../config";
 import { useActor } from "../hooks/useActor";
 import { useEmailAuth } from "../hooks/useEmailAuth";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -621,9 +623,28 @@ export default function AdminPage({
   isSuperAdmin = false,
   staffEmail,
 }: AdminPageProps) {
-  const { actor, isFetching: actorFetching } = useActor();
+  const { actor: emailActor, isFetching: actorFetching } = useActor();
   const { identity, isInitializing } = useInternetIdentity();
   const emailAuth = useEmailAuth();
+  const [superAdminActor, setSuperAdminActor] =
+    useState<backendInterface | null>(null);
+
+  // For super admin: build actor using Internet Identity when authenticated
+  useEffect(() => {
+    if (!isSuperAdmin || !identity) return;
+    (async () => {
+      try {
+        const a = await createActorWithConfig({ agentOptions: { identity } });
+        await a._initializeAccessControlWithSecret("");
+        setSuperAdminActor(a);
+      } catch {
+        // ignore -- will fall back
+      }
+    })();
+  }, [isSuperAdmin, identity]);
+
+  // Use superAdminActor for super admin path, emailActor for staff path
+  const actor = isSuperAdmin ? (superAdminActor ?? emailActor) : emailActor;
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [copiedPrincipal, setCopiedPrincipal] = useState(false);
   const [users, setUsers] = useState<UserEntry[]>([]);

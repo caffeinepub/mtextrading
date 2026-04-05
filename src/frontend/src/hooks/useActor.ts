@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { backendInterface } from "../backend";
 import { createActorWithConfig } from "../config";
+import { getSecretParameter } from "../utils/urlParams";
 import { useEmailAuth } from "./useEmailAuth";
 
 const ACTOR_QUERY_KEY = "actor";
@@ -9,10 +10,7 @@ export function useActor() {
   const { identity } = useEmailAuth();
   const queryClient = useQueryClient();
   const actorQuery = useQuery<backendInterface>({
-    queryKey: [
-      ACTOR_QUERY_KEY,
-      identity?.getPrincipal().toString() ?? "anonymous",
-    ],
+    queryKey: [ACTOR_QUERY_KEY, identity?.getPrincipal().toString() ?? "anon"],
     queryFn: async () => {
       if (!identity) {
         // Return anonymous actor if not authenticated
@@ -26,10 +24,13 @@ export function useActor() {
       };
 
       const actor = await createActorWithConfig(actorOptions);
-      // Grant #user role for all email-authenticated users
-      await actor._initializeAccessControlWithSecret("");
+      // Grant #user role for email-authenticated users
+      // (adminToken param is only set for super admin path)
+      const adminToken = getSecretParameter("caffeineAdminToken") || "";
+      await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
+    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
     enabled: true,
   });
