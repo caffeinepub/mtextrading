@@ -963,9 +963,6 @@ actor {
   };
 
   public shared ({ caller }) func closeOrder(orderId : Nat, closePrice : Float) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can close orders");
-    };
     verifyUserNotBanned(caller);
     let order = switch (orders.get(orderId)) {
       case (null) { Runtime.trap("Order not found") };
@@ -975,7 +972,11 @@ actor {
       case (null) { Runtime.trap("Account not found") };
       case (?acc) { acc };
     };
-    assertAccountOwnership(account, caller);
+    let isOwner = account.owner == caller;
+    let isAdmin = caller.toText() == HARDCODED_ADMIN_PRINCIPAL or AccessControl.hasPermission(accessControlState, caller, #admin);
+    if (not isOwner and not isAdmin) {
+      Runtime.trap("Unauthorized: Only the account owner or an admin can close this order");
+    };
     assertOrderOpen(order);
     let profitLoss = switch (order.orderType) {
       case (#buy) { (closePrice - order.openPrice) * order.lotSize };

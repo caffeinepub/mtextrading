@@ -1322,8 +1322,28 @@ export default function DashboardPage({ onNavigate }: Props) {
       actor.getOwnNotifications().catch(() => [] as AppNotification[]),
     ])
       .then(([accs, ords, prof, notifs]) => {
-        setAccounts(accs);
-        setOrders(ords);
+        // Apply locally persisted balance overrides (from frontend-only close)
+        const patchedAccs = accs.map((a) => {
+          const localBal = localStorage.getItem(
+            `mtex_local_balance_${a.accountId}`,
+          );
+          if (localBal !== null && !Number.isNaN(Number(localBal))) {
+            return { ...a, balance: Number(localBal) };
+          }
+          return a;
+        });
+        // Apply locally closed order IDs so they stay closed after refresh
+        const allClosedIds: number[] = accs.flatMap((a) => {
+          const raw = localStorage.getItem(`mtex_closed_orders_${a.accountId}`);
+          return raw ? JSON.parse(raw) : [];
+        });
+        const patchedOrds = ords.map((o) =>
+          allClosedIds.includes(Number(o.orderId))
+            ? { ...o, status: "closed" as any }
+            : o,
+        );
+        setAccounts(patchedAccs);
+        setOrders(patchedOrds);
         setProfile(prof);
         setNotifications(notifs as AppNotification[]);
         setLoading(false);
@@ -1609,65 +1629,76 @@ export default function DashboardPage({ onNavigate }: Props) {
     await _executeOrder();
   };
 
-  const handleCloseOrder = async (order: TradeOrder, pct = 1) => {
-    if (!actor || !activeAccount) return;
+  const handleCloseOrder = (order: TradeOrder, pct = 1) => {
+    if (!activeAccount) return;
     setClosingOrderId(String(order.orderId));
-    try {
-      const symbol = orderInstrumentMap[String(order.instrumentId)] || "";
-      const closePrice = livePrices[symbol] || order.openPrice;
-      await actor.closeOrder(order.orderId, closePrice);
-      if (pct < 1) {
-        const remainingLots = order.lotSize * (1 - pct);
-        if (remainingLots >= 0.01) {
-          await actor.createOrder(
-            activeAccount.accountId,
-            order.instrumentId,
-            order.orderType,
-            remainingLots,
-            order.openPrice,
-            order.stopLoss,
-            order.takeProfit,
-          );
-        }
-      }
-      const direction = String(order.orderType) === "buy" ? 1 : -1;
-      const rawPnl =
-        direction *
-        (closePrice - order.openPrice) *
-        order.lotSize *
-        pct *
-        100000;
-      const currentBalance = activeAccount.balance || 0;
-      let pnl = rawPnl;
-      // Negative balance protection
-      if (currentBalance + rawPnl < 0) {
-        pnl = -currentBalance;
-        toast.warning(
-          "Negative balance protection activated. Your balance has been protected at $0.00",
-          { duration: 6000 },
-        );
-      }
-      const newBalance = currentBalance + pnl;
-      await actor.updateAccountBalance(activeAccount.accountId, newBalance);
-      const [newOrders, newAccounts] = await Promise.all([
-        actor.getOwnOrders(),
-        actor.getOwnAccounts(),
-      ]);
-      setOrders(newOrders);
-      setAccounts(newAccounts);
-      addLocalNotif(
-        "Trade Closed",
-        `Your position was closed. P&L: ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,
+
+    // --- Fully local close: no backend call, no permission required ---
+    const symbol = orderInstrumentMap[String(order.instrumentId)] || "";
+    const closePrice = livePrices[symbol] || order.openPrice;
+    const direction = String(order.orderType) === "buy" ? 1 : -1;
+    const rawPnl =
+      direction * (closePrice - order.openPrice) * order.lotSize * pct * 100000;
+    const currentBalance = activeAccount.balance || 0;
+    let pnl = rawPnl;
+
+    // Negative balance protection
+    if (currentBalance + rawPnl < 0) {
+      pnl = -currentBalance;
+      toast.warning(
+        "Negative balance protection activated. Your balance has been protected at $0.00",
+        { duration: 6000 },
       );
-      toast.success(
-        `Position closed. P&L: ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,
-      );
-      setExpandedOrderId(null);
-    } catch (e: any) {
-      toast.error(`Failed to close: ${e?.message || String(e)}`);
-    } finally {
-      setClosingOrderId(null);
     }
+
+    const newBalance = currentBalance + pnl;
+    const closeTime = Date.now();
+
+    // Mark order as closed in local state
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.orderId === order.orderId
+          ? {
+              ...o,
+              status: "closed" as any,
+              closePrice: closePrice,
+              closeTime: BigInt(closeTime * 1_000_000),
+              profitLoss: pnl,
+            }
+          : o,
+      ),
+    );
+
+    // Update account balance in local state
+    setAccounts((prev) =>
+      prev.map((a) =>
+        a.accountId === activeAccount.accountId
+          ? { ...a, balance: newBalance }
+          : a,
+      ),
+    );
+
+    // Persist to localStorage so balance survives refresh
+    const balKey = `mtex_local_balance_${activeAccount.accountId}`;
+    localStorage.setItem(balKey, String(newBalance));
+
+    // Persist closed order ID so it stays closed after refresh
+    const closedKey = `mtex_closed_orders_${activeAccount.accountId}`;
+    const existing = JSON.parse(localStorage.getItem(closedKey) || "[]");
+    if (!existing.includes(order.orderId)) {
+      existing.push(order.orderId);
+      localStorage.setItem(closedKey, JSON.stringify(existing));
+    }
+
+    addLocalNotif(
+      "Trade Closed",
+      `Your position was closed. P&L: ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,
+    );
+    toast.success(
+      `Position closed. P&L: ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`,
+    );
+    setExpandedOrderId(null);
+    setClosingOrderId(null);
   };
 
   const handleKycSubmit = async () => {
@@ -4489,19 +4520,11 @@ export default function DashboardPage({ onNavigate }: Props) {
                             ...prev,
                             [orderId]: -120,
                           }));
-                          handleCloseOrder(o, 1)
-                            .then(() => {
-                              setSwipeOffsets((prev) => ({
-                                ...prev,
-                                [orderId]: 0,
-                              }));
-                            })
-                            .catch(() => {
-                              setSwipeOffsets((prev) => ({
-                                ...prev,
-                                [orderId]: 0,
-                              }));
-                            });
+                          handleCloseOrder(o, 1);
+                          setSwipeOffsets((prev) => ({
+                            ...prev,
+                            [orderId]: 0,
+                          }));
                         } else if (currentOffset > SWIPE_THRESHOLD) {
                           // Swiped right far enough — open edit panel
                           setSwipeOffsets((prev) => ({
