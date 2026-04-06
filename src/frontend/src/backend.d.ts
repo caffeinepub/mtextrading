@@ -281,6 +281,7 @@ export interface backendInterface {
     getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnOrders(): Promise<Array<TradeOrder>>;
     getOwnTransactions(): Promise<Array<Transaction>>;
+    getOwnWithdrawalRequests(): Promise<Array<WithdrawalRequest>>;
     getPlatformSettings(): Promise<PlatformSettings>;
     getStaffAdmins(): Promise<Array<string>>;
     getStripeSessionStatus(sessionId: string): Promise<StripeSessionStatus>;

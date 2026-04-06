@@ -297,6 +297,7 @@ export interface _SERVICE {
   'getOwnNotifications' : ActorMethod<[], Array<AppNotification>>,
   'getOwnOrders' : ActorMethod<[], Array<TradeOrder>>,
   'getOwnTransactions' : ActorMethod<[], Array<Transaction>>,
+  'getOwnWithdrawalRequests' : ActorMethod<[], Array<WithdrawalRequest>>,
   'getPlatformSettings' : ActorMethod<[], PlatformSettings>,
   'getStaffAdmins' : ActorMethod<[], Array<string>>,
   'getStripeSessionStatus' : ActorMethod<[string], StripeSessionStatus>,

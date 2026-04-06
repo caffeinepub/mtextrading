@@ -381,6 +381,7 @@ export interface backendInterface {
     getOwnNotifications(): Promise<Array<AppNotification>>;
     getOwnOrders(): Promise<Array<TradeOrder>>;
     getOwnTransactions(): Promise<Array<Transaction>>;
+    getOwnWithdrawalRequests(): Promise<Array<WithdrawalRequest>>;
     getPlatformSettings(): Promise<PlatformSettings>;
     getStaffAdmins(): Promise<Array<string>>;
     getStripeSessionStatus(sessionId: string): Promise<StripeSessionStatus>;
@@ -1131,6 +1132,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getOwnTransactions();
             return from_candid_vec_n35(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getOwnWithdrawalRequests(): Promise<Array<WithdrawalRequest>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOwnWithdrawalRequests();
+                return from_candid_vec_n49(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOwnWithdrawalRequests();
+            return from_candid_vec_n49(this._uploadFile, this._downloadFile, result);
         }
     }
     async getPlatformSettings(): Promise<PlatformSettings> {

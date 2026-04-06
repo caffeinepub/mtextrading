@@ -18,13 +18,6 @@ import {
 } from "react";
 import { loadConfig } from "../config";
 
-// Context that EmailAuthProvider uses to inject the email-derived identity.
-// When set, useInternetIdentity() will return this identity so that useActor
-// automatically picks up the email identity without any other changes.
-export const EmailIdentityOverrideContext = createContext<
-  import("@icp-sdk/core/agent").Identity | null
->(null);
-
 export type Status =
   | "initializing"
   | "idle"
@@ -71,6 +64,15 @@ const DEFAULT_IDENTITY_PROVIDER = process.env.II_URL;
 type ProviderValue = InternetIdentityContext;
 const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
   undefined,
+);
+
+/**
+ * Context that allows injecting an email-derived identity to override
+ * Internet Identity for normal user flows. Only the super admin uses
+ * Internet Identity directly; all email-logged-in users use this override.
+ */
+export const EmailIdentityOverrideContext = createContext<Identity | null>(
+  null,
 );
 
 /**

@@ -1050,6 +1050,7 @@ export default function DashboardPage({ onNavigate }: Props) {
       timestamp: number;
       status: string;
       requestId?: bigint;
+      address?: string;
     }[]
   >([]);
   const [ownTransactions, setOwnTransactions] = useState<
@@ -1065,7 +1066,10 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [orders, setOrders] = useState<TradeOrder[]>([]);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeAccountIdx, setActiveAccountIdx] = useState(0);
+  const [activeAccountIdx, setActiveAccountIdx] = useState(() => {
+    const saved = localStorage.getItem("mtex_active_account_idx");
+    return saved !== null && !Number.isNaN(Number(saved)) ? Number(saved) : 0;
+  });
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const addLocalNotif = (title: string, body: string) => {
@@ -1322,15 +1326,24 @@ export default function DashboardPage({ onNavigate }: Props) {
       actor.getOwnNotifications().catch(() => [] as AppNotification[]),
     ])
       .then(([accs, ords, prof, notifs]) => {
-        // Apply locally persisted balance overrides (from frontend-only close)
+        // Apply locally persisted P&L deltas on top of backend balance
+        // Admin balance updates and withdrawal deductions come from backend,
+        // closed trade P&L is tracked as a delta on top
         const patchedAccs = accs.map((a) => {
-          const localBal = localStorage.getItem(
-            `mtex_local_balance_${a.accountId}`,
+          const pnlDelta = localStorage.getItem(
+            `mtex_pnl_delta_${a.accountId}`,
           );
-          if (localBal !== null && !Number.isNaN(Number(localBal))) {
-            return { ...a, balance: Number(localBal) };
-          }
-          return a;
+          const delta =
+            pnlDelta !== null && !Number.isNaN(Number(pnlDelta))
+              ? Number(pnlDelta)
+              : 0;
+          const newBalance = a.balance + delta;
+          // Also update the legacy key so any remaining reads get correct value
+          localStorage.setItem(
+            `mtex_local_balance_${a.accountId}`,
+            String(newBalance),
+          );
+          return { ...a, balance: newBalance };
         });
         // Apply locally closed order IDs so they stay closed after refresh
         const allClosedIds: number[] = accs.flatMap((a) => {
@@ -1362,6 +1375,34 @@ export default function DashboardPage({ onNavigate }: Props) {
       .catch(() => {});
   }, [actor]);
 
+  // Periodic account re-sync to pick up admin balance updates & approved withdrawals
+  useEffect(() => {
+    if (!actor) return;
+    const interval = setInterval(() => {
+      actor
+        .getOwnAccounts()
+        .then((accs) => {
+          setAccounts((_prev) => {
+            // Only update if backend balance changed (admin updated or withdrawal approved)
+            // Reapply local PnL delta on top of new backend balance
+            return accs.map((a) => {
+              const pnlDelta = Number(
+                localStorage.getItem(`mtex_pnl_delta_${a.accountId}`) || "0",
+              );
+              const newBal = a.balance + pnlDelta;
+              localStorage.setItem(
+                `mtex_local_balance_${a.accountId}`,
+                String(newBal),
+              );
+              return { ...a, balance: newBal };
+            });
+          });
+        })
+        .catch(() => {});
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [actor]);
+
   // Fetch own deposits and withdrawals from backend on actor load
   useEffect(() => {
     if (!actor) return;
@@ -1376,34 +1417,42 @@ export default function DashboardPage({ onNavigate }: Props) {
         );
       })
       .catch(() => {});
-    // Load withdrawal requests from backend so history persists after refresh
+    // Load withdrawal requests from backend with full details including address
     actor
       .getOwnTransactions()
       .then((txns) => {
-        // Store ALL transactions for history display
         const sorted = [...txns].sort(
           (a: any, b: any) => Number(b.timestamp) - Number(a.timestamp),
         );
         setOwnTransactions(sorted as any);
-
-        // Also extract withdrawal transactions for pending withdrawal display
-        const withdrawalTxns = sorted.filter(
-          (t: any) =>
-            "withdrawal" in (t.transactionType ?? {}) ||
-            String(t.transactionType) === "withdrawal" ||
-            String(t.transactionType) === "Withdrawal",
+      })
+      .catch(() => {});
+    actor
+      .getOwnWithdrawalRequests()
+      .then((reqs) => {
+        const sorted = [...reqs].sort(
+          (a: any, b: any) => Number(b.timestamp) - Number(a.timestamp),
         );
-        if (withdrawalTxns.length > 0) {
-          setPendingWithdrawals(
-            withdrawalTxns.map((t: any) => ({
-              amount: t.amount,
-              method: "crypto",
-              timestamp: Number(t.timestamp) / 1_000_000,
-              status: String(t.status),
-              requestId: t.transactionId,
-            })),
-          );
-        }
+        setPendingWithdrawals(
+          sorted.map((r: any) => {
+            const details = String(r.bankDetails || "");
+            const isCrypto = details.startsWith("[CRYPTO:");
+            const coinMatch = details.match(/\[CRYPTO:([^\]]+)\]/);
+            const coin = coinMatch ? coinMatch[1] : "";
+            const address = isCrypto
+              ? details.replace(/\[CRYPTO:[^\]]+\]\s*/, "").trim()
+              : details.replace("[BANK]", "").trim();
+            return {
+              amount: r.amount,
+              method: isCrypto ? "crypto" : "bank",
+              timestamp: Number(r.timestamp) / 1_000_000,
+              status: String(Object.keys(r.status)[0] || "pending"),
+              requestId: r.requestId,
+              address,
+              coin,
+            };
+          }),
+        );
       })
       .catch(() => {});
   }, [actor]);
@@ -1413,9 +1462,13 @@ export default function DashboardPage({ onNavigate }: Props) {
   const openOrders = useMemo(
     () =>
       orders.filter(
-        (o) => o.status === "open" || (o.status as string) === "Open",
+        (o) =>
+          (o.status === "open" || (o.status as string) === "Open") &&
+          (activeAccount
+            ? Number(o.accountId) === Number(activeAccount.accountId)
+            : true),
       ),
-    [orders],
+    [orders, activeAccount],
   );
 
   const closedOrders = useMemo(
@@ -1678,7 +1731,12 @@ export default function DashboardPage({ onNavigate }: Props) {
       ),
     );
 
-    // Persist to localStorage so balance survives refresh
+    // Persist P&L delta to localStorage so balance survives refresh
+    // We store cumulative PnL delta on top of backend balance
+    const deltaKey = `mtex_pnl_delta_${activeAccount.accountId}`;
+    const existingDelta = Number(localStorage.getItem(deltaKey) || "0");
+    localStorage.setItem(deltaKey, String(existingDelta + pnl));
+    // Also update legacy key
     const balKey = `mtex_local_balance_${activeAccount.accountId}`;
     localStorage.setItem(balKey, String(newBalance));
 
@@ -1748,6 +1806,10 @@ export default function DashboardPage({ onNavigate }: Props) {
           method: withdrawMethod,
           timestamp: Date.now(),
           status: "pending",
+          address:
+            withdrawMethod === "crypto"
+              ? withdrawWalletAddress.trim()
+              : withdrawBankDetails.trim(),
         },
       ]);
       setWithdrawAmount("");
@@ -5464,19 +5526,23 @@ export default function DashboardPage({ onNavigate }: Props) {
                   </div>
                 );
               })}
-              {pendingWithdrawals.map((wd, i) => (
-                <div
-                  key={`wd-${wd.timestamp}-${i}`}
-                  data-ocid={`dashboard.withdrawal.item.${i + 1}`}
-                  className="flex items-center justify-between py-3 border-b border-gray-100"
-                >
-                  {(() => {
-                    const isWdCompleted =
-                      wd.status === "completed" || wd.status === "Completed";
-                    const isWdFailed =
-                      wd.status === "failed" || wd.status === "Failed";
-                    return (
-                      <div className="flex items-center gap-3">
+              {pendingWithdrawals.map((wd, i) => {
+                const isWdCompleted =
+                  wd.status === "completed" ||
+                  wd.status === "Completed" ||
+                  wd.status === "approved";
+                const isWdFailed =
+                  wd.status === "failed" ||
+                  wd.status === "Failed" ||
+                  wd.status === "rejected";
+                return (
+                  <div
+                    key={`wd-${wd.timestamp}-${i}`}
+                    data-ocid={`dashboard.withdrawal.item.${i + 1}`}
+                    className="py-3 border-b border-gray-100"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
                         <span
                           className={`text-xs font-semibold px-3 py-1 rounded-full ${
                             isWdCompleted
@@ -5497,16 +5563,33 @@ export default function DashboardPage({ onNavigate }: Props) {
                           • {new Date(wd.timestamp).toLocaleDateString()}
                         </p>
                       </div>
-                    );
-                  })()}
-                  <p className="text-sm font-semibold text-red-600">
-                    -$
-                    {wd.amount.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </p>
-                </div>
-              ))}
+                      <p className="text-sm font-semibold text-red-600">
+                        -$
+                        {wd.amount.toLocaleString("en-US", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </p>
+                    </div>
+                    {wd.address && (
+                      <div className="mt-2 flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                        <p className="text-xs text-gray-600 font-mono break-all flex-1">
+                          {wd.address}
+                        </p>
+                        <button
+                          type="button"
+                          className="shrink-0 text-blue-600 hover:text-blue-800"
+                          onClick={() => {
+                            navigator.clipboard.writeText(wd.address || "");
+                            toast.success("Address copied");
+                          }}
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -8004,6 +8087,10 @@ export default function DashboardPage({ onNavigate }: Props) {
                       data-ocid={`dashboard.account.item.${i + 1}`}
                       onClick={() => {
                         setActiveAccountIdx(i);
+                        localStorage.setItem(
+                          "mtex_active_account_idx",
+                          String(i),
+                        );
                         setShowSwitchAccount(false);
                       }}
                       className="w-full flex items-center justify-between px-4 py-3.5 rounded-xl mb-2 border"

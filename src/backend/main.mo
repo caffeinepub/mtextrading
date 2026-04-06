@@ -730,6 +730,9 @@ actor {
       case (null) { Runtime.trap("Deposit request not found") };
       case (?r) { r };
     };
+    if (req.status == #approved) {
+      return; // Already approved, idempotent
+    };
     if (req.status != #pending) {
       Runtime.trap("Deposit is not pending");
     };
@@ -780,14 +783,14 @@ actor {
       case null { "" };
     };
     if (userEmail != "") {
-      let _ = await EmailClient.sendRawEmail(
+      let _ = try { await EmailClient.sendRawEmail(
         "no-reply",
         [userEmail],
         [],
         [],
         "Your Mtextrading Account Has Been Funded",
         "Congratulations!\n\nYour Mtextrading account has been successfully funded.\n\nAmount credited: " # amountStr # "\n\nYou are all set to start trading. Head to the Trade tab to place your first position across forex, crypto, stocks, and more.\n\nIf you did not authorize this deposit, please contact our support team immediately.\n\nThe Mtextrading Team"
-      );
+      ) } catch (_e) { #err("") };
     };
   };
 
@@ -930,6 +933,17 @@ actor {
       func(account) { account.owner == caller }
     ).map(func(account) { account.accountId });
     transactions.values().toArray().filter(func(tx) { ownAccountIds.values().contains(tx.accountId) });
+  };
+
+  public query ({ caller }) func getOwnWithdrawalRequests() : async [WithdrawalRequest] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view withdrawal requests");
+    };
+    verifyUserNotBanned(caller);
+    let ownAccountIds = tradingAccounts.values().toArray().filter(
+      func(account) { account.owner == caller }
+    ).map(func(account) { account.accountId });
+    withdrawalRequests.values().toArray().filter(func(r) { ownAccountIds.values().contains(r.accountId) });
   };
 
   public shared ({ caller }) func createOrder(accountId : Nat, instrumentId : Nat, orderType : OrderType, lotSize : Float, openPrice : Float, stopLoss : Float, takeProfit : Float) : async Nat {
