@@ -92,11 +92,30 @@ export function useLivePrices() {
     return `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
   };
 
+  /**
+   * Seed a new symbol into the live price engine.
+   * Call this whenever a custom instrument is loaded that isn't in BASE_PRICES.
+   * After calling this, the symbol will tick every second just like built-in pairs.
+   */
+  const addSymbol = (symbol: string, startingPrice: number) => {
+    if (!symbol || startingPrice <= 0) return;
+    // Don't overwrite an existing symbol
+    setPrices((prev) => {
+      if (prev[symbol] !== undefined) return prev;
+      const next = { ...prev, [symbol]: startingPrice };
+      return next;
+    });
+    if (initialRef.current[symbol] === undefined) {
+      initialRef.current[symbol] = startingPrice;
+    }
+  };
+
   return {
     prices,
     flash,
     getChangePct,
     formatChangePct,
     initialPrices: initialRef.current,
+    addSymbol,
   };
 }

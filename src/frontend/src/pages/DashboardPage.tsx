@@ -978,6 +978,7 @@ export default function DashboardPage({ onNavigate }: Props) {
     flash: priceFlash,
     getChangePct,
     formatChangePct,
+    addSymbol,
   } = useLivePrices();
   const formatLivePrice = (symbol: string, staticPrice: string): string => {
     const live = livePrices[symbol];
@@ -1317,6 +1318,7 @@ export default function DashboardPage({ onNavigate }: Props) {
 
   // Session persists until manual logout (no inactivity timeout)
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: addSymbol is stable
   useEffect(() => {
     if (!actor) return;
     Promise.all([
@@ -1369,7 +1371,21 @@ export default function DashboardPage({ onNavigate }: Props) {
       .getAllInstruments()
       .then((insts) => {
         const map: Record<string, string> = {};
-        for (const inst of insts) map[String(inst.instrumentId)] = inst.symbol;
+        for (const inst of insts) {
+          map[String(inst.instrumentId)] = inst.symbol;
+        }
+        // Seed any custom instruments into the live price engine
+        for (const inst of insts) {
+          if (inst.symbol) {
+            addSymbol(
+              inst.symbol,
+              Number((inst as any).bidPrice) ||
+                Number((inst as any).askPrice) ||
+                Number((inst as any).lastPrice) ||
+                1,
+            );
+          }
+        }
         setOrderInstrumentMap(map);
       })
       .catch(() => {});
@@ -1652,11 +1668,12 @@ export default function DashboardPage({ onNavigate }: Props) {
         sl,
         tp,
       );
-      // Also update instrument map
+      // Also update instrument map and seed live price engine for new symbols
       setOrderInstrumentMap((prev) => ({
         ...prev,
         [String(instrumentId)]: selectedInstrument.symbol,
       }));
+      addSymbol(selectedInstrument.symbol, price || 1);
       const newOrders = await actor.getOwnOrders();
       setOrders(newOrders);
       addLocalNotif(
@@ -1743,8 +1760,8 @@ export default function DashboardPage({ onNavigate }: Props) {
     // Persist closed order ID so it stays closed after refresh
     const closedKey = `mtex_closed_orders_${activeAccount.accountId}`;
     const existing = JSON.parse(localStorage.getItem(closedKey) || "[]");
-    if (!existing.includes(order.orderId)) {
-      existing.push(order.orderId);
+    if (!existing.includes(Number(order.orderId))) {
+      existing.push(Number(order.orderId));
       localStorage.setItem(closedKey, JSON.stringify(existing));
     }
 
