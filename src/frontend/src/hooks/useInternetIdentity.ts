@@ -67,13 +67,13 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
 );
 
 /**
- * Override context: when an email identity is set here, useInternetIdentity()
- * returns it instead of the Internet Identity. This allows email-based users
- * to use the same actor infrastructure without Internet Identity.
+ * When an email-based identity is active, set this context to override
+ * the identity returned by useInternetIdentity. This allows useActor to
+ * pick up the email identity without any changes to its own code.
  */
-export const EmailIdentityOverrideContext = createContext<
-  import("@icp-sdk/core/agent").Identity | null
->(null);
+export const EmailIdentityOverrideContext = createContext<Identity | null>(
+  null,
+);
 
 /**
  * Create the auth client with default options or options provided by the user.
@@ -119,7 +119,7 @@ export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
   const overrideIdentity = useContext(EmailIdentityOverrideContext);
-  if (overrideIdentity) {
+  if (overrideIdentity !== null) {
     return { ...context, identity: overrideIdentity };
   }
   return context;

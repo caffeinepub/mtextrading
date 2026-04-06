@@ -1348,15 +1348,45 @@ export default function DashboardPage({ onNavigate }: Props) {
           return { ...a, balance: newBalance };
         });
         // Apply locally closed order IDs so they stay closed after refresh
-        const allClosedIds: number[] = accs.flatMap((a) => {
+        // Also restore closePrice and profitLoss from localStorage
+        const allClosedMeta: Record<
+          number,
+          { closePrice: number; profitLoss: number }
+        > = {};
+        for (const a of accs) {
           const raw = localStorage.getItem(`mtex_closed_orders_${a.accountId}`);
-          return raw ? JSON.parse(raw) : [];
+          if (raw) {
+            try {
+              const arr: Array<
+                number | { id: number; closePrice: number; profitLoss: number }
+              > = JSON.parse(raw);
+              for (const entry of arr) {
+                if (typeof entry === "number") {
+                  allClosedMeta[entry] = { closePrice: 0, profitLoss: 0 };
+                } else if (entry && typeof entry === "object") {
+                  allClosedMeta[entry.id] = {
+                    closePrice: entry.closePrice,
+                    profitLoss: entry.profitLoss,
+                  };
+                }
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        const patchedOrds = ords.map((o) => {
+          const meta = allClosedMeta[Number(o.orderId)];
+          if (meta !== undefined) {
+            return {
+              ...o,
+              status: "closed" as any,
+              closePrice: meta.closePrice || o.openPrice,
+              profitLoss: meta.profitLoss,
+            };
+          }
+          return o;
         });
-        const patchedOrds = ords.map((o) =>
-          allClosedIds.includes(Number(o.orderId))
-            ? { ...o, status: "closed" as any }
-            : o,
-        );
         setAccounts(patchedAccs);
         setOrders(patchedOrds);
         setProfile(prof);
@@ -1675,7 +1705,46 @@ export default function DashboardPage({ onNavigate }: Props) {
       }));
       addSymbol(selectedInstrument.symbol, price || 1);
       const newOrders = await actor.getOwnOrders();
-      setOrders(newOrders);
+      // Re-apply closed-order patch so previously closed trades don't reappear
+      const closedMetaAfterPlace: Record<
+        number,
+        { closePrice: number; profitLoss: number }
+      > = {};
+      try {
+        const rawClosed = localStorage.getItem(
+          `mtex_closed_orders_${activeAccount?.accountId}`,
+        );
+        if (rawClosed) {
+          const arr: Array<
+            number | { id: number; closePrice: number; profitLoss: number }
+          > = JSON.parse(rawClosed);
+          for (const entry of arr) {
+            if (typeof entry === "number") {
+              closedMetaAfterPlace[entry] = { closePrice: 0, profitLoss: 0 };
+            } else if (entry && typeof entry === "object") {
+              closedMetaAfterPlace[entry.id] = {
+                closePrice: entry.closePrice,
+                profitLoss: entry.profitLoss,
+              };
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      const patchedNewOrders = newOrders.map((o) => {
+        const meta = closedMetaAfterPlace[Number(o.orderId)];
+        if (meta !== undefined) {
+          return {
+            ...o,
+            status: "closed" as any,
+            closePrice: meta.closePrice || o.openPrice,
+            profitLoss: meta.profitLoss,
+          };
+        }
+        return o;
+      });
+      setOrders(patchedNewOrders);
       addLocalNotif(
         "Trade Opened",
         `Your ${selectedInstrument?.symbol || ""} ${orderSide.toUpperCase()} order has been placed.`,
@@ -1757,12 +1826,28 @@ export default function DashboardPage({ onNavigate }: Props) {
     const balKey = `mtex_local_balance_${activeAccount.accountId}`;
     localStorage.setItem(balKey, String(newBalance));
 
-    // Persist closed order ID so it stays closed after refresh
+    // Persist closed order with closePrice and profitLoss so they survive refresh
     const closedKey = `mtex_closed_orders_${activeAccount.accountId}`;
-    const existing = JSON.parse(localStorage.getItem(closedKey) || "[]");
-    if (!existing.includes(Number(order.orderId))) {
-      existing.push(Number(order.orderId));
-      localStorage.setItem(closedKey, JSON.stringify(existing));
+    let existingClosed: Array<
+      number | { id: number; closePrice: number; profitLoss: number }
+    > = [];
+    try {
+      existingClosed = JSON.parse(localStorage.getItem(closedKey) || "[]");
+    } catch {
+      /* ignore */
+    }
+    const alreadySaved = existingClosed.some((e) =>
+      typeof e === "number"
+        ? e === Number(order.orderId)
+        : e.id === Number(order.orderId),
+    );
+    if (!alreadySaved) {
+      existingClosed.push({
+        id: Number(order.orderId),
+        closePrice,
+        profitLoss: pnl,
+      });
+      localStorage.setItem(closedKey, JSON.stringify(existingClosed));
     }
 
     addLocalNotif(
