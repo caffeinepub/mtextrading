@@ -18,16 +18,6 @@ import {
 } from "react";
 import { loadConfig } from "../config";
 
-/**
- * EmailIdentityOverrideContext allows the EmailAuthProvider to inject
- * an email-derived identity into the Internet Identity context so that
- * useActor picks it up automatically for all normal user flows.
- * Internet Identity is only used for the Super Admin dashboard.
- */
-export const EmailIdentityOverrideContext = createContext<Identity | null>(
-  null,
-);
-
 export type Status =
   | "initializing"
   | "idle"
@@ -77,6 +67,14 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
 );
 
 /**
+ * Context that allows EmailAuthProvider to inject the email identity
+ * so that useActor (which reads from useInternetIdentity) picks it up automatically.
+ */
+export const EmailIdentityOverrideContext = createContext<
+  import("@icp-sdk/core/agent").Identity | null
+>(null);
+
+/**
  * Create the auth client with default options or options provided by the user.
  */
 async function createAuthClient(
@@ -115,22 +113,15 @@ function assertProviderPresent(
 /**
  * Hook to access the internet identity as well as loginStatus along with
  * login and clear functions.
- *
- * IMPORTANT: When an email identity override is set (via EmailAuthProvider),
- * this hook returns the email identity instead of Internet Identity.
- * This allows useActor to work correctly for email-authenticated users
- * without any changes to useActor itself.
  */
 export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
-  // If an email identity override is set, use it instead of Internet Identity
+  // If an email identity override is set (email-logged-in user), return it
+  // instead of the Internet Identity so useActor always gets the right identity.
   const emailIdentityOverride = useContext(EmailIdentityOverrideContext);
   if (emailIdentityOverride) {
-    return {
-      ...context,
-      identity: emailIdentityOverride,
-    };
+    return { ...context, identity: emailIdentityOverride };
   }
   return context;
 };
