@@ -18,6 +18,10 @@ import {
 } from "react";
 import { loadConfig } from "../config";
 
+export const EmailIdentityOverrideContext = createContext<Identity | null>(
+  null,
+);
+
 export type Status =
   | "initializing"
   | "idle"
@@ -67,14 +71,6 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
 );
 
 /**
- * Context that allows EmailAuthProvider to inject the email identity
- * so that useActor (which reads from useInternetIdentity) picks it up automatically.
- */
-export const EmailIdentityOverrideContext = createContext<
-  import("@icp-sdk/core/agent").Identity | null
->(null);
-
-/**
  * Create the auth client with default options or options provided by the user.
  */
 async function createAuthClient(
@@ -117,13 +113,11 @@ function assertProviderPresent(
 export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
-  // If an email identity override is set (email-logged-in user), return it
-  // instead of the Internet Identity so useActor always gets the right identity.
-  const emailIdentityOverride = useContext(EmailIdentityOverrideContext);
-  if (emailIdentityOverride) {
-    return { ...context, identity: emailIdentityOverride };
-  }
-  return context;
+  const overrideIdentity = useContext(EmailIdentityOverrideContext);
+  return {
+    ...context,
+    identity: overrideIdentity ?? context.identity,
+  };
 };
 
 /**

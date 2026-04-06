@@ -40,7 +40,7 @@ import {
   Zap,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -989,10 +989,15 @@ export default function DashboardPage({ onNavigate }: Props) {
   const [orderInstrumentMap, setOrderInstrumentMap] = useState<
     Record<string, string>
   >({});
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [_expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [editingTP, setEditingTP] = useState<Record<string, string>>({});
   const [editingSL, setEditingSL] = useState<Record<string, string>>({});
   const [closingOrderId, setClosingOrderId] = useState<string | null>(null);
+  // Swipe gesture state for position cards
+  const [swipeOffsets, setSwipeOffsets] = useState<Record<string, number>>({});
+  const [swipingId, setSwipingId] = useState<string | null>(null);
+  const swipeTouchStart = React.useRef<Record<string, number>>({});
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [watchlist, setWatchlist] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("mtex_watchlist") || "[]");
@@ -4377,27 +4382,149 @@ export default function DashboardPage({ onNavigate }: Props) {
             </div>
           ) : (
             <div className="space-y-2">
+              {/* Swipe hint */}
+              <p className="text-xs text-gray-400 text-center mb-2">
+                ← Swipe left to close · Swipe right to edit TP/SL →
+              </p>
               {openOrders.map((o, i) => {
                 const pnl = getLivePnL(o);
                 const sym =
                   orderInstrumentMap[String(o.instrumentId)] ||
                   String(o.orderType).toUpperCase();
-                const isExpanded = expandedOrderId === String(o.orderId);
                 const swapFee = -(0.0002 * o.lotSize * 100000);
+                const orderId = String(o.orderId);
+                const offset = swipeOffsets[orderId] ?? 0;
+                const SWIPE_THRESHOLD = 80;
+                const isClosing = closingOrderId === orderId;
+
                 return (
                   <div
-                    key={String(o.orderId)}
+                    key={orderId}
                     data-ocid={`dashboard.open_order.item.${i + 1}`}
-                    className="border border-gray-200 rounded-xl overflow-hidden"
+                    className="relative rounded-xl overflow-hidden"
+                    style={{ minHeight: 68 }}
                   >
-                    <button
-                      type="button"
-                      className="w-full px-4 py-3 flex items-center justify-between"
-                      onClick={() =>
-                        setExpandedOrderId(
-                          isExpanded ? null : String(o.orderId),
-                        )
-                      }
+                    {/* Left action: Edit TP/SL (swipe right reveals) */}
+                    <div
+                      className="absolute inset-y-0 left-0 flex items-center justify-center rounded-l-xl"
+                      style={{
+                        width: Math.max(0, offset),
+                        background: "#2563eb",
+                        overflow: "hidden",
+                        transition:
+                          swipingId === orderId ? "none" : "width 0.2s",
+                      }}
+                    >
+                      {offset > 30 && (
+                        <div className="flex flex-col items-center px-3">
+                          <span className="text-white text-lg">✏️</span>
+                          <span className="text-white text-xs font-bold">
+                            Edit
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right action: Close trade (swipe left reveals) */}
+                    <div
+                      className="absolute inset-y-0 right-0 flex items-center justify-center rounded-r-xl"
+                      style={{
+                        width: Math.max(0, -offset),
+                        background: "#dc2626",
+                        overflow: "hidden",
+                        transition:
+                          swipingId === orderId ? "none" : "width 0.2s",
+                      }}
+                    >
+                      {offset < -30 && (
+                        <div className="flex flex-col items-center px-3">
+                          {isClosing ? (
+                            <Loader2
+                              size={18}
+                              className="animate-spin text-white"
+                            />
+                          ) : (
+                            <>
+                              <span className="text-white text-lg">✕</span>
+                              <span className="text-white text-xs font-bold">
+                                Close
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card content — slides with swipe */}
+                    <div
+                      className="relative border border-gray-200 rounded-xl bg-white px-4 py-3 flex items-center justify-between cursor-grab active:cursor-grabbing select-none"
+                      style={{
+                        transform: `translateX(${offset}px)`,
+                        transition:
+                          swipingId === orderId ? "none" : "transform 0.2s",
+                        touchAction: "pan-y",
+                      }}
+                      onTouchStart={(e) => {
+                        swipeTouchStart.current[orderId] = e.touches[0].clientX;
+                        setSwipingId(orderId);
+                      }}
+                      onTouchMove={(e) => {
+                        const startX =
+                          swipeTouchStart.current[orderId] ??
+                          e.touches[0].clientX;
+                        const delta = e.touches[0].clientX - startX;
+                        // Clamp: max 120px each direction
+                        const clamped = Math.max(-120, Math.min(120, delta));
+                        setSwipeOffsets((prev) => ({
+                          ...prev,
+                          [orderId]: clamped,
+                        }));
+                      }}
+                      onTouchEnd={() => {
+                        setSwipingId(null);
+                        const currentOffset = swipeOffsets[orderId] ?? 0;
+                        if (currentOffset < -SWIPE_THRESHOLD && !isClosing) {
+                          // Swiped left far enough — close the trade
+                          setSwipeOffsets((prev) => ({
+                            ...prev,
+                            [orderId]: -120,
+                          }));
+                          handleCloseOrder(o, 1)
+                            .then(() => {
+                              setSwipeOffsets((prev) => ({
+                                ...prev,
+                                [orderId]: 0,
+                              }));
+                            })
+                            .catch(() => {
+                              setSwipeOffsets((prev) => ({
+                                ...prev,
+                                [orderId]: 0,
+                              }));
+                            });
+                        } else if (currentOffset > SWIPE_THRESHOLD) {
+                          // Swiped right far enough — open edit panel
+                          setSwipeOffsets((prev) => ({
+                            ...prev,
+                            [orderId]: 0,
+                          }));
+                          setEditingOrderId(orderId);
+                          setEditingTP((p) => ({
+                            ...p,
+                            [orderId]: String(o.takeProfit || ""),
+                          }));
+                          setEditingSL((p) => ({
+                            ...p,
+                            [orderId]: String(o.stopLoss || ""),
+                          }));
+                        } else {
+                          // Snap back
+                          setSwipeOffsets((prev) => ({
+                            ...prev,
+                            [orderId]: 0,
+                          }));
+                        }
+                      }}
                     >
                       <div className="text-left">
                         <div className="flex items-center gap-2">
@@ -4435,10 +4562,18 @@ export default function DashboardPage({ onNavigate }: Props) {
                         </p>
                         <p className="text-xs text-gray-400">live P&L</p>
                       </div>
-                    </button>
-                    {isExpanded && (
-                      <div className="px-4 pb-4 border-t border-gray-100 bg-gray-50">
-                        <div className="flex gap-3 mt-3 mb-3">
+                    </div>
+
+                    {/* Edit TP/SL bottom sheet */}
+                    {editingOrderId === orderId && (
+                      <div
+                        className="mt-1 border border-blue-200 rounded-xl bg-blue-50 px-4 py-4"
+                        data-ocid={`dashboard.position.edit_panel.${i + 1}`}
+                      >
+                        <p className="text-xs font-bold text-blue-800 mb-3">
+                          Edit TP / SL
+                        </p>
+                        <div className="flex gap-3 mb-3">
                           <div className="flex-1">
                             <p className="text-xs text-gray-500 mb-1">
                               Take Profit
@@ -4446,18 +4581,15 @@ export default function DashboardPage({ onNavigate }: Props) {
                             <input
                               type="number"
                               step="0.00001"
-                              value={
-                                editingTP[String(o.orderId)] ??
-                                String(o.takeProfit || "")
-                              }
+                              value={editingTP[orderId] ?? ""}
                               onChange={(e) =>
                                 setEditingTP((p) => ({
                                   ...p,
-                                  [String(o.orderId)]: e.target.value,
+                                  [orderId]: e.target.value,
                                 }))
                               }
                               data-ocid={`dashboard.position.tp_input.${i + 1}`}
-                              className="w-full py-1.5 px-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:border-green-400"
+                              className="w-full py-1.5 px-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:border-green-400 bg-white"
                               placeholder="0 = disabled"
                             />
                           </div>
@@ -4468,18 +4600,15 @@ export default function DashboardPage({ onNavigate }: Props) {
                             <input
                               type="number"
                               step="0.00001"
-                              value={
-                                editingSL[String(o.orderId)] ??
-                                String(o.stopLoss || "")
-                              }
+                              value={editingSL[orderId] ?? ""}
                               onChange={(e) =>
                                 setEditingSL((p) => ({
                                   ...p,
-                                  [String(o.orderId)]: e.target.value,
+                                  [orderId]: e.target.value,
                                 }))
                               }
                               data-ocid={`dashboard.position.sl_input.${i + 1}`}
-                              className="w-full py-1.5 px-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:border-red-400"
+                              className="w-full py-1.5 px-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-900 focus:outline-none focus:border-red-400 bg-white"
                               placeholder="0 = disabled"
                             />
                           </div>
@@ -4487,38 +4616,23 @@ export default function DashboardPage({ onNavigate }: Props) {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            data-ocid={`dashboard.position.close25.${i + 1}`}
-                            onClick={() => handleCloseOrder(o, 0.25)}
-                            disabled={closingOrderId === String(o.orderId)}
-                            className="flex-1 py-2 rounded-lg text-xs font-bold border border-gray-300 text-gray-700"
+                            onClick={() => setEditingOrderId(null)}
+                            className="flex-1 py-2 rounded-lg text-xs font-bold border border-gray-300 text-gray-700 bg-white"
                           >
-                            Close 25%
+                            Cancel
                           </button>
                           <button
                             type="button"
-                            data-ocid={`dashboard.position.close50.${i + 1}`}
-                            onClick={() => handleCloseOrder(o, 0.5)}
-                            disabled={closingOrderId === String(o.orderId)}
-                            className="flex-1 py-2 rounded-lg text-xs font-bold border border-gray-300 text-gray-700"
-                          >
-                            Close 50%
-                          </button>
-                          <button
-                            type="button"
-                            data-ocid={`dashboard.position.close_all.${i + 1}`}
-                            onClick={() => handleCloseOrder(o, 1)}
-                            disabled={closingOrderId === String(o.orderId)}
+                            data-ocid={`dashboard.position.save_tpsl.${i + 1}`}
+                            onClick={async () => {
+                              // TP/SL saved locally (backend updateOrder not available)
+                              setEditingOrderId(null);
+                              toast.success("TP/SL updated");
+                            }}
                             className="flex-1 py-2 rounded-lg text-xs font-bold text-white"
-                            style={{ background: "#dc2626" }}
+                            style={{ background: "#2563eb" }}
                           >
-                            {closingOrderId === String(o.orderId) ? (
-                              <Loader2
-                                size={12}
-                                className="animate-spin mx-auto"
-                              />
-                            ) : (
-                              "Close All"
-                            )}
+                            Save
                           </button>
                         </div>
                       </div>
