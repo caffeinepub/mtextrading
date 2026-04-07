@@ -70,17 +70,86 @@ function SuperAdminSection() {
 
 // Staff Admin section — email OTP only
 function StaffAdminSection() {
-  const [staffEmail, setStaffEmail] = useState<string | null>(null);
+  const [staffEmail, setStaffEmail] = useState<string | null>(() => {
+    try {
+      const saved = sessionStorage.getItem("mtex_staff_email");
+      if (saved) {
+        // Check if session is still valid (5 hours)
+        const loginTime = Number(
+          sessionStorage.getItem("mtex_staff_login_time") || "0",
+        );
+        const elapsed = (Date.now() - loginTime) / 1000;
+        if (elapsed < 5 * 3600) return saved;
+        // Expired — clear
+        sessionStorage.removeItem("mtex_staff_email");
+        sessionStorage.removeItem("mtex_staff_login_time");
+      }
+    } catch {}
+    return null;
+  });
+  const [timeLeft, setTimeLeft] = useState<number>(() => {
+    try {
+      const loginTime = Number(
+        sessionStorage.getItem("mtex_staff_login_time") || "0",
+      );
+      if (loginTime) {
+        const remaining = 5 * 3600 - (Date.now() - loginTime) / 1000;
+        return Math.max(0, Math.floor(remaining));
+      }
+    } catch {}
+    return 5 * 3600;
+  });
+
+  // Countdown timer
+  useEffect(() => {
+    if (!staffEmail) return;
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0) {
+          // Session expired — log out
+          try {
+            sessionStorage.removeItem("mtex_staff_email");
+            sessionStorage.removeItem("mtex_staff_login_time");
+          } catch {}
+          setStaffEmail(null);
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [staffEmail]);
 
   if (!staffEmail) {
     return (
-      <StaffAdminLoginPage onLoginSuccess={(email) => setStaffEmail(email)} />
+      <StaffAdminLoginPage
+        onLoginSuccess={(email) => {
+          sessionStorage.setItem("mtex_staff_email", email);
+          sessionStorage.setItem("mtex_staff_login_time", String(Date.now()));
+          setTimeLeft(5 * 3600);
+          setStaffEmail(email);
+        }}
+      />
     );
   }
 
+  const handleStaffLogout = () => {
+    try {
+      sessionStorage.removeItem("mtex_staff_email");
+      sessionStorage.removeItem("mtex_staff_login_time");
+    } catch {}
+    setStaffEmail(null);
+  };
+
   return (
     <div className="min-h-screen bg-white">
-      <AdminPage isSuperAdmin={false} staffEmail={staffEmail} />
+      <AdminPage
+        isSuperAdmin={false}
+        staffEmail={staffEmail}
+        sessionTimeLeft={timeLeft}
+        onSessionExpired={handleStaffLogout}
+      />
     </div>
   );
 }

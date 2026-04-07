@@ -618,10 +618,14 @@ function BotConfigSection({ actor }: { actor: any }) {
 interface AdminPageProps {
   isSuperAdmin?: boolean;
   staffEmail?: string;
+  sessionTimeLeft?: number;
+  onSessionExpired?: () => void;
 }
 export default function AdminPage({
   isSuperAdmin = false,
   staffEmail,
+  sessionTimeLeft,
+  onSessionExpired,
 }: AdminPageProps) {
   const { actor: emailActor, isFetching: actorFetching } = useActor();
   const { identity, isInitializing } = useInternetIdentity();
@@ -1437,12 +1441,35 @@ export default function AdminPage({
           size="sm"
           className="text-gray-600 border-gray-200 hover:bg-gray-100"
           onClick={() => {
-            window.location.href = "/";
+            if (onSessionExpired) {
+              onSessionExpired();
+            } else {
+              window.location.href = "/";
+            }
           }}
         >
           <LogOut size={16} className="mr-1.5" /> Logout
         </Button>
       </header>
+      {/* Session countdown banner — only shown for staff admins in last hour */}
+      {sessionTimeLeft !== undefined && sessionTimeLeft < 3600 && (
+        <div
+          className="w-full px-4 py-2 text-center text-sm font-medium"
+          style={{ background: "#fef3c7", color: "#92400e" }}
+        >
+          {sessionTimeLeft <= 0
+            ? "Session expired. Please log in again."
+            : (() => {
+                const h = Math.floor(sessionTimeLeft / 3600);
+                const m = Math.floor((sessionTimeLeft % 3600) / 60);
+                const s = sessionTimeLeft % 60;
+                const hh = String(h).padStart(2, "0");
+                const mm = String(m).padStart(2, "0");
+                const ss = String(s).padStart(2, "0");
+                return `Session expires in ${hh}:${mm}:${ss}`;
+              })()}
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Mobile overlay */}

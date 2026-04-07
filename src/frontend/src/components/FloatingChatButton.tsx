@@ -231,6 +231,7 @@ export default function FloatingChatButton({ actor }: Props) {
     if (open) {
       setLoading(true);
       setUnreadCount(0);
+      localStorage.setItem("mtex_chat_last_read", String(Date.now()));
       loadMessages().finally(() => setLoading(false));
       pollRef.current = setInterval(loadMessages, 10_000);
     } else {
@@ -243,8 +244,13 @@ export default function FloatingChatButton({ actor }: Props) {
 
   useEffect(() => {
     if (!open) {
-      const adminCount = messages.filter((m) => m.isFromAdmin).length;
-      setUnreadCount(adminCount);
+      const lastRead = Number(
+        localStorage.getItem("mtex_chat_last_read") || "0",
+      );
+      const newAdminMsgs = messages.filter(
+        (m) => m.isFromAdmin && Number(m.timestamp) / 1_000_000 > lastRead,
+      ).length;
+      setUnreadCount(newAdminMsgs);
     }
   }, [open, messages]);
 
@@ -300,6 +306,7 @@ export default function FloatingChatButton({ actor }: Props) {
       <button
         type="button"
         data-ocid="chat.open_modal_button"
+        data-chat-trigger
         onMouseDown={onMouseDown}
         onTouchStart={onTouchStart}
         onClick={(e) => {

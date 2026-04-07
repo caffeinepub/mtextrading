@@ -24,6 +24,8 @@ import {
   LayoutGrid,
   LineChart as LineChartIcon,
   Loader2,
+  Mail,
+  MessageCircle,
   MoreVertical,
   Share2,
   ShieldCheck,
@@ -914,7 +916,8 @@ function LeaderboardHubView({
 
 export default function DashboardPage({ onNavigate }: Props) {
   const { actor } = useActor();
-  const { logout: emailLogout } = useEmailAuth();
+  const { logout: emailLogout, currentEmail: currentUserEmail } =
+    useEmailAuth();
 
   // ── Navigation
   const [activeTab, setActiveTab] = useState<BottomTab>("home");
@@ -1353,25 +1356,36 @@ export default function DashboardPage({ onNavigate }: Props) {
           number,
           { closePrice: number; profitLoss: number }
         > = {};
-        for (const a of accs) {
-          const raw = localStorage.getItem(`mtex_closed_orders_${a.accountId}`);
-          if (raw) {
-            try {
-              const arr: Array<
-                number | { id: number; closePrice: number; profitLoss: number }
-              > = JSON.parse(raw);
-              for (const entry of arr) {
-                if (typeof entry === "number") {
-                  allClosedMeta[entry] = { closePrice: 0, profitLoss: 0 };
-                } else if (entry && typeof entry === "object") {
-                  allClosedMeta[entry.id] = {
-                    closePrice: entry.closePrice,
-                    profitLoss: entry.profitLoss,
-                  };
+        {
+          const savedIdxRaw = localStorage.getItem("mtex_active_account_idx");
+          const savedIdx =
+            savedIdxRaw !== null && !Number.isNaN(Number(savedIdxRaw))
+              ? Number(savedIdxRaw)
+              : 0;
+          const activeAcc = accs[savedIdx] ?? accs[0];
+          if (activeAcc) {
+            const raw = localStorage.getItem(
+              `mtex_closed_orders_${activeAcc.accountId}`,
+            );
+            if (raw) {
+              try {
+                const arr: Array<
+                  | number
+                  | { id: number; closePrice: number; profitLoss: number }
+                > = JSON.parse(raw);
+                for (const entry of arr) {
+                  if (typeof entry === "number") {
+                    allClosedMeta[entry] = { closePrice: 0, profitLoss: 0 };
+                  } else if (entry && typeof entry === "object") {
+                    allClosedMeta[entry.id] = {
+                      closePrice: entry.closePrice,
+                      profitLoss: entry.profitLoss,
+                    };
+                  }
                 }
+              } catch {
+                /* ignore */
               }
-            } catch {
-              /* ignore */
             }
           }
         }
@@ -1449,7 +1463,8 @@ export default function DashboardPage({ onNavigate }: Props) {
     return () => clearInterval(interval);
   }, [actor]);
 
-  // Fetch own deposits and withdrawals from backend on actor load
+  // Fetch own deposits and withdrawals from backend on actor load or account switch
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeAccountIdx triggers re-fetch on account switch
   useEffect(() => {
     if (!actor) return;
     // Load deposits
@@ -1501,7 +1516,41 @@ export default function DashboardPage({ onNavigate }: Props) {
         );
       })
       .catch(() => {});
-  }, [actor]);
+    // Poll withdrawal status every 30s so approved withdrawals update automatically
+    const withdrawalPollInterval = setInterval(() => {
+      if (actor) {
+        actor
+          .getOwnWithdrawalRequests()
+          .then((reqs: any[]) => {
+            const sorted = [...reqs].sort(
+              (a: any, b: any) => Number(b.timestamp) - Number(a.timestamp),
+            );
+            setPendingWithdrawals(
+              sorted.map((r: any) => {
+                const details = String(r.bankDetails || "");
+                const isCrypto = details.startsWith("[CRYPTO:");
+                const coinMatch = details.match(/\[CRYPTO:([^\]]+)\]/);
+                const coin = coinMatch ? coinMatch[1] : "";
+                const address = isCrypto
+                  ? details.replace(/\[CRYPTO:[^\]]+\]\s*/, "").trim()
+                  : details.replace("[BANK]", "").trim();
+                return {
+                  amount: r.amount,
+                  method: isCrypto ? "crypto" : "bank",
+                  timestamp: Number(r.timestamp) / 1_000_000,
+                  status: String(Object.keys(r.status)[0] || "pending"),
+                  requestId: r.requestId,
+                  address,
+                  coin,
+                };
+              }),
+            );
+          })
+          .catch(() => {});
+      }
+    }, 30_000);
+    return () => clearInterval(withdrawalPollInterval);
+  }, [actor, activeAccountIdx]);
 
   const activeAccount: TradingAccount | undefined = accounts[activeAccountIdx];
 
@@ -1520,9 +1569,12 @@ export default function DashboardPage({ onNavigate }: Props) {
   const closedOrders = useMemo(
     () =>
       orders.filter(
-        (o) => o.status === "closed" || (o.status as string) === "Closed",
+        (o) =>
+          (o.status === "closed" || (o.status as string) === "Closed") &&
+          (!activeAccount ||
+            String(o.accountId) === String(activeAccount.accountId)),
       ),
-    [orders],
+    [orders, activeAccount],
   );
 
   const getLivePnL = (order: TradeOrder) => {
@@ -1808,11 +1860,11 @@ export default function DashboardPage({ onNavigate }: Props) {
       ),
     );
 
-    // Update account balance in local state
+    // Update account balance and equity in local state
     setAccounts((prev) =>
       prev.map((a) =>
         a.accountId === activeAccount.accountId
-          ? { ...a, balance: newBalance }
+          ? { ...a, balance: newBalance, equity: newBalance }
           : a,
       ),
     );
@@ -1901,6 +1953,16 @@ export default function DashboardPage({ onNavigate }: Props) {
           : `[BANK] ${withdrawBankDetails.trim()}`,
       );
       toast.success("Withdrawal request submitted");
+      // Send withdrawal confirmation email notification
+      if (currentUserEmail && actor) {
+        actor
+          .sendAnnouncementToUser(
+            currentUserEmail,
+            "Withdrawal Request Received",
+            "Your withdrawal request has been received and is being processed. You will be notified once it is approved.",
+          )
+          .catch(() => {});
+      }
       setPendingWithdrawals((prev) => [
         ...prev,
         {
@@ -7879,51 +7941,57 @@ export default function DashboardPage({ onNavigate }: Props) {
                     Need assistance? Choose from our help topics or connect with
                     a support agent for real-time help.
                   </p>
-                  {[
-                    {
-                      label: "Most common topics",
-                      icon: <BookOpen size={18} className="text-blue-600" />,
-                      sub: "Browse FAQs",
-                    },
-                    {
-                      label: "Explore help centre",
-                      icon: <Globe size={18} className="text-blue-600" />,
-                      sub: "Open in browser",
-                    },
-                    {
-                      label: "Telegram",
-                      icon: <Activity size={18} className="text-blue-600" />,
-                      sub: "@mtextrading",
-                    },
-                    {
-                      label: "WhatsApp",
-                      icon: <Activity size={18} className="text-blue-600" />,
-                      sub: "Chat on WhatsApp",
-                    },
-                    {
-                      label: "Chat with an agent",
-                      icon: <HelpCircle size={18} className="text-blue-600" />,
-                      sub: "In-app chat",
-                    },
-                  ].map((item) => (
-                    <button
-                      type="button"
-                      key={item.label}
-                      data-ocid={`dashboard.support.$item.label.toLowerCase().replace(/\s+/g, "_").button`}
-                      className="w-full flex items-center justify-between py-4 border-b border-gray-100"
-                    >
-                      <div className="flex items-center gap-3">
-                        {item.icon}
-                        <div className="text-left">
-                          <p className="text-sm font-medium text-gray-900">
-                            {item.label}
-                          </p>
-                          <p className="text-xs text-gray-400">{item.sub}</p>
-                        </div>
-                      </div>
-                      <ChevronRight size={16} className="text-gray-400" />
-                    </button>
-                  ))}
+                  {/* Email Support */}
+                  <button
+                    type="button"
+                    data-ocid="dashboard.support.email.button"
+                    className="w-full flex items-center gap-4 px-4 py-4 bg-gray-50 rounded-xl mb-3 hover:bg-gray-100 transition-colors"
+                    onClick={() => {
+                      window.location.href =
+                        "mailto:mtextradingsupport@gmail.com";
+                    }}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                      <Mail className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Email Support
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        mtextradingsupport@gmail.com
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </button>
+
+                  {/* In-App Chat */}
+                  <button
+                    type="button"
+                    data-ocid="dashboard.support.chat.button"
+                    className="w-full flex items-center gap-4 px-4 py-4 bg-gray-50 rounded-xl mb-3 hover:bg-gray-100 transition-colors"
+                    onClick={() => {
+                      setProfileSubView(null);
+                      setShowProfile(false);
+                      setTimeout(() => {
+                        const chatBtn = document.querySelector(
+                          "[data-chat-trigger]",
+                        ) as HTMLElement;
+                        if (chatBtn) chatBtn.click();
+                      }, 300);
+                    }}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <MessageCircle className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div className="flex-1 text-left">
+                      <p className="text-sm font-semibold text-gray-900">
+                        In-App Chat
+                      </p>
+                      <p className="text-xs text-gray-500">Chat with support</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </button>
                 </div>
               </div>
             ) : (
@@ -8301,6 +8369,10 @@ export default function DashboardPage({ onNavigate }: Props) {
                         const newAccounts = await actor.getOwnAccounts();
                         setAccounts(newAccounts);
                         setActiveAccountIdx(newAccounts.length - 1);
+                        localStorage.setItem(
+                          "mtex_active_account_idx",
+                          String(newAccounts.length - 1),
+                        );
                         setShowSwitchAccount(false);
                         toast.success("Demo account created with $100,000");
                       } catch (e: unknown) {
