@@ -987,7 +987,7 @@ actor {
       case (?acc) { acc };
     };
     let isOwner = account.owner == caller;
-    let isAdmin = caller.toText() == HARDCODED_ADMIN_PRINCIPAL or AccessControl.hasPermission(accessControlState, caller, #admin);
+    let isAdmin = isHardcodedAdmin(caller) or AccessControl.hasPermission(accessControlState, caller, #admin);
     if (not isOwner and not isAdmin) {
       Runtime.trap("Unauthorized: Only the account owner or an admin can close this order");
     };
@@ -1408,7 +1408,7 @@ The Mtextrading Team"
   };
 
   public shared ({ caller }) func sendAdminReply(userId : Principal, content : Text, imageData : ?Blob, audioData : ?Blob) : async Nat {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isHardcodedAdmin(caller) and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can send replies");
     };
     let msgId = nextChatMessageId;
@@ -1436,7 +1436,7 @@ The Mtextrading Team"
   };
 
   public query ({ caller }) func getAllChatConversations() : async [ChatConversation] {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isHardcodedAdmin(caller) and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can view all conversations");
     };
     // Collect unique user principals who have sent messages (not admin replies)
@@ -1477,7 +1477,7 @@ The Mtextrading Team"
   };
 
   public query ({ caller }) func getUserChatMessages(userId : Principal) : async [ChatMessage] {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isHardcodedAdmin(caller) and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can view user messages");
     };
     chatMessages.values().toArray().filter(func(m : ChatMessage) : Bool {
@@ -1486,7 +1486,7 @@ The Mtextrading Team"
   };
 
   public shared ({ caller }) func markConversationRead(userId : Principal) : async () {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isHardcodedAdmin(caller) and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can mark conversations as read");
     };
     chatReadStatus.add(userId, Time.now());
@@ -1508,15 +1508,19 @@ The Mtextrading Team"
   };
 
   let HARDCODED_ADMIN_PRINCIPAL : Text = "4qixx-3hllv-jm445-bwqqh-qdyjf-nnauk-kw52p-jnkte-uro35-xvk3i-4ae";
+  let HARDCODED_ADMIN_PRINCIPAL_2 : Text = "dyj64-3cpn5-m7z3m-vfvjo-xf57b-qjvxm-kfst7-dw7wi-jaakf-elhaz-sae";
+  func isHardcodedAdmin(caller : Principal) : Bool {
+    caller.toText() == HARDCODED_ADMIN_PRINCIPAL or caller.toText() == HARDCODED_ADMIN_PRINCIPAL_2
+  };
 
   func verifySuperAdminAccess(caller : Principal) {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL) {
+    if (not isHardcodedAdmin(caller)) {
       Runtime.trap("Unauthorized: Only the super admin can perform this action");
     };
   };
 
   func verifyAdminAccess(caller : Principal) {
-    if (caller.toText() != HARDCODED_ADMIN_PRINCIPAL and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+    if (not isHardcodedAdmin(caller) and not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
       Runtime.trap("Unauthorized: Only admins can perform this action");
     };
   };

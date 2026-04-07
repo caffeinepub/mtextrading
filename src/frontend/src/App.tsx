@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Layout from "./components/Layout";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import { Toaster } from "./components/ui/sonner";
 import { EmailAuthProvider } from "./hooks/useEmailAuth";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
@@ -270,6 +271,7 @@ export default function App() {
       <NavCtx.Provider value={{ navigate }}>
         <Toaster richColors />
         {renderPage()}
+        <PWAInstallPrompt />
       </NavCtx.Provider>
     </EmailAuthProvider>
   );

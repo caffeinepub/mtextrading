@@ -2,9 +2,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title></title>
-    <script type="module" crossorigin src="/assets/index-32gT9WDb.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CScecpbS.css">
+    <title>Mtextrading</title>
+    <meta name="description" content="Multi-asset trading and investment platform — forex, crypto, stocks, and more." />
+    <meta name="theme-color" content="#1a2744" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mtex" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/assets/generated/mtex-pwa-icon-192.dim_192x192.png" />
+    <link rel="icon" type="image/png" href="/assets/generated/mtex-pwa-icon-192.dim_192x192.png" />
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-CB_3Me7B.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DJbeCUso.css">
   </head>
   <body>
     <div id="root"></div>

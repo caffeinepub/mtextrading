@@ -18,10 +18,6 @@ import {
 } from "react";
 import { loadConfig } from "../config";
 
-export const EmailIdentityOverrideContext = createContext<Identity | null>(
-  null,
-);
-
 export type Status =
   | "initializing"
   | "idle"
@@ -71,6 +67,14 @@ const InternetIdentityReactContext = createContext<ProviderValue | undefined>(
 );
 
 /**
+ * Context for injecting an email-derived identity into the Internet Identity flow.
+ * Set by EmailAuthProvider when a user logs in with email + password.
+ */
+export const EmailIdentityOverrideContext = createContext<
+  import("@icp-sdk/core/agent").Identity | null
+>(null);
+
+/**
  * Create the auth client with default options or options provided by the user.
  */
 async function createAuthClient(
@@ -114,7 +118,10 @@ export const useInternetIdentity = (): InternetIdentityContext => {
   const context = useContext(InternetIdentityReactContext);
   assertProviderPresent(context);
   const overrideIdentity = useContext(EmailIdentityOverrideContext);
-  return { ...context, identity: overrideIdentity ?? context.identity };
+  if (overrideIdentity) {
+    return { ...context, identity: overrideIdentity };
+  }
+  return context;
 };
 
 /**

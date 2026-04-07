@@ -659,6 +659,22 @@ export default function AdminPage({
   const [activeSection, setActiveSection] = useState("users");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // ── Real-time polling & unread badge tracking ──────────────────────────
+  // Stores last-seen counts per tab (loaded from localStorage)
+  const [seenCounts, setSeenCounts] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("mtex_admin_seen_counts") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const persistSeenCounts = (next: Record<string, number>) => {
+    setSeenCounts(next);
+    try {
+      localStorage.setItem("mtex_admin_seen_counts", JSON.stringify(next));
+    } catch {}
+  };
+
   // Promotions state
   const [promotions, setPromotions] = useState<Promotion[]>(() => {
     try {
@@ -959,10 +975,15 @@ export default function AdminPage({
     }
 
     // Super admin path: check hardcoded principal or AccessControl
-    const ADMIN_PRINCIPAL =
-      "4qixx-3hllv-jm445-bwqqh-qdyjf-nnauk-kw52p-jnkte-uro35-xvk3i-4ae";
+    const ALLOWED_SUPER_ADMIN_PRINCIPALS = [
+      "4qixx-3hllv-jm445-bwqqh-qdyjf-nnauk-kw52p-jnkte-uro35-xvk3i-4ae",
+      "dyj64-3cpn5-m7z3m-vfvjo-xf57b-qjvxm-kfst7-dw7wi-jaakf-elhaz-sae",
+    ];
     const callerPrincipal = identity?.getPrincipal().toText();
-    if (callerPrincipal === ADMIN_PRINCIPAL) {
+    if (
+      callerPrincipal &&
+      ALLOWED_SUPER_ADMIN_PRINCIPALS.includes(callerPrincipal)
+    ) {
       setIsAdmin(true);
       Promise.all([
         loadData(),
@@ -989,6 +1010,16 @@ export default function AdminPage({
       })
       .catch(() => setLoading(false));
   }, [actor, isInitializing, identity, actorFetching, isSuperAdmin]);
+
+  // ── Polling: re-fetch deposits/withdrawals every 30s ────────────────────
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional polling
+  useEffect(() => {
+    if (!actor || !isAdmin) return;
+    const interval = setInterval(() => {
+      loadPart2Data();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [actor, isAdmin]);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat("en-US", {
@@ -1352,6 +1383,22 @@ export default function AdminPage({
   const pendingWithdrawalsCount = withdrawalRequests.filter(
     (w) => String(w.status) === "pending",
   ).length;
+  // Unread = total minus what admin has already seen
+  const depositsTotal = transactions.filter((t) =>
+    String((t as any).transactionType ?? (t as any).txType ?? "deposit")
+      .toLowerCase()
+      .includes("deposit"),
+  ).length;
+  const unreadDeposits = Math.max(
+    0,
+    depositsTotal - (seenCounts.deposits ?? depositsTotal),
+  );
+  const unreadWithdrawals = Math.max(
+    0,
+    pendingWithdrawalsCount -
+      (seenCounts.withdrawals ?? pendingWithdrawalsCount),
+  );
+
   const navItems = [
     { id: "users", label: "Users", icon: Users, badge: users.length },
     {
@@ -1363,12 +1410,22 @@ export default function AdminPage({
     { id: "accounts", label: "Accounts", icon: Wallet, badge: null },
     { id: "trades", label: "Trades", icon: Activity, badge: null },
     { id: "instruments", label: "Instruments", icon: BarChart2, badge: null },
-    { id: "deposits", label: "Deposits", icon: TrendingDown, badge: null },
+    {
+      id: "deposits",
+      label: "Deposits",
+      icon: TrendingDown,
+      badge: unreadDeposits > 0 ? unreadDeposits : null,
+    },
     {
       id: "withdrawals",
       label: "Withdrawals",
       icon: TrendingUp,
-      badge: pendingWithdrawalsCount > 0 ? pendingWithdrawalsCount : null,
+      badge:
+        unreadWithdrawals > 0
+          ? unreadWithdrawals
+          : pendingWithdrawalsCount > 0
+            ? pendingWithdrawalsCount
+            : null,
     },
     { id: "financials", label: "Financials", icon: DollarSign, badge: null },
     {
@@ -1388,7 +1445,16 @@ export default function AdminPage({
       id: "crypto-deposits",
       label: "Crypto Deposits",
       icon: CircleDollarSign,
-      badge: null,
+      badge: (() => {
+        const pending = cryptoDeposits.filter(
+          (d: any) => String(d.status) === "pending",
+        ).length;
+        const unread = Math.max(
+          0,
+          pending - (seenCounts["crypto-deposits"] ?? pending),
+        );
+        return unread > 0 ? unread : pending > 0 ? pending : null;
+      })(),
     },
     { id: "wallets", label: "Wallets", icon: CreditCard, badge: null },
     {
@@ -1512,6 +1578,26 @@ export default function AdminPage({
                   onClick={() => {
                     setActiveSection(item.id);
                     setSidebarOpen(false);
+                    // Mark tab as seen - clear unread badge
+                    if (item.id === "deposits") {
+                      persistSeenCounts({
+                        ...seenCounts,
+                        deposits: depositsTotal,
+                      });
+                    } else if (item.id === "withdrawals") {
+                      persistSeenCounts({
+                        ...seenCounts,
+                        withdrawals: pendingWithdrawalsCount,
+                      });
+                    } else if (item.id === "crypto-deposits") {
+                      const pendingCD = cryptoDeposits.filter(
+                        (d: any) => String(d.status) === "pending",
+                      ).length;
+                      persistSeenCounts({
+                        ...seenCounts,
+                        "crypto-deposits": pendingCD,
+                      });
+                    }
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? "bg-blue-50 text-blue-700 border border-blue-100" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"}`}
                 >
